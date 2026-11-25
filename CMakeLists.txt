@@ -15,7 +15,7 @@ juce_add_plugin(WaveringDistortionMod
     FORMATS                 VST3 Standalone
     PRODUCT_NAME            "Wavering Distortion Mod"
     BUNDLE_ID               "com.hunterice.waveringdistortionmod"
-    COPY_PLUGIN_AFTER_BUILD TRUE) # <-- Скобка закрывается здесь, и никаких других параметров ниже!
+    COPY_PLUGIN_AFTER_BUILD TRUE)
 
 target_sources(WaveringDistortionMod PRIVATE
     src/PluginProcessor.cpp
