@@ -10,19 +10,18 @@ FetchContent_MakeAvailable(JUCE)
 
 juce_add_plugin(WaveringDistortionMod
     COMPANY_NAME            "Hunterice"
-    PLUGIN_MANUFACTURER_CODE HUNT          # Ровно 4 заглавных символа
-    PLUGIN_CODE             WVDM          # Ровно 4 заглавных символа
+    PLUGIN_MANUFACTURER_CODE HUNT
+    PLUGIN_CODE             WVDM
     FORMATS                 VST3 Standalone
     PRODUCT_NAME            "Wavering Distortion Mod"
-    BUNDLE_ID               "com.hunterice.waveringdistortionmod" # Обязательно для macOS/iOS
-    COPY_PLUGIN_AFTER_BUILD TRUE          # Автоматически копирует плагин в папку плагинов после сборки
-    IS_VST_DEPRECATED       false)
+    BUNDLE_ID               "com.hunterice.waveringdistortionmod"
+    COPY_PLUGIN_AFTER_BUILD TRUE)  # <--- Закрывающая скобка ЗДЕСЬ, без IS_VST_DEPRECATED
 
 target_sources(WaveringDistortionMod PRIVATE
     src/PluginProcessor.cpp
-    src/PluginProcessor.h                 # Добавлено для корректного отображения в IDE
+    src/PluginProcessor.h
     src/PluginEditor.cpp
-    src/PluginEditor.h)                   # Добавлено для корректного отображения в IDE
+    src/PluginEditor.h)
 
 target_compile_definitions(WaveringDistortionMod PRIVATE
     JUCE_WEB_BROWSER=0
@@ -32,4 +31,4 @@ target_compile_definitions(WaveringDistortionMod PRIVATE
 target_link_libraries(WaveringDistortionMod PRIVATE
     juce::juce_audio_utils
     juce::juce_recommended_config_flags
-    juce::juce_recommended_lto_flags)     # Опционально: включение Link Time Optimization для уменьшения размера и ускорения
+    juce::juce_recommended_lto_flags)
