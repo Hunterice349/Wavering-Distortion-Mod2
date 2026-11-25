@@ -1,0 +1,15 @@
+name: Build Plugin
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (JUCE скачается автоматически)
+        run: cmake -B build -S . -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WaveringDistortionMod-Windows
+          path: build/WaveringDistortionMod_artefacts/Release
