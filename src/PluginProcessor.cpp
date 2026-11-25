@@ -13,15 +13,32 @@ juce::AudioProcessorValueTreeState::ParameterLayout WaveringAudioProcessor::crea
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    params.push_back (std::make_unique<juce::AudioParameterFloat> ("drive",  "Drive",      0.0f,   100.0f,  20.0f));
-    params.push_back (std::make_unique<juce::AudioParameterFloat> ("tone",   "Tone",       2000.0f, 18000.0f, 8000.0f, "Hz"));
-    params.push_back (std::make_unique<juce::AudioParameterFloat> ("wave",   "Wave Freq",  40.0f,  4000.0f,  220.0f, "Hz"));
-    params.push_back (std::make_unique<juce::AudioParameterFloat> ("res",    "Resonance",  0.0f,   0.97f,    0.6f));
-    params.push_back (std::make_unique<juce::AudioParameterFloat> ("ring",   "Ring Freq",  0.0f,   2000.0f,  0.0f, "Hz"));
-    params.push_back (std::make_unique<juce::AudioParameterFloat> ("depth",  "Ring Depth", 0.0f,   1.0f,     0.5f));
-    params.push_back (std::make_unique<juce::AudioParameterFloat> ("mix",    "Mix",        0.0f,   1.0f,     0.5f));
-    params.push_back (std::make_unique<juce::AudioParameterFloat> ("out",    "Output",     -40.0f, 12.0f,    0.0f, "dB"));
-    params.push_back (std::make_unique<juce::AudioParameterBool>  ("bypass", "Bypass",     false));
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "drive", 1 }, "Drive", juce::NormalisableRange<float> (0.0f, 100.0f), 20.0f));
+    
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "tone", 1 }, "Tone", juce::NormalisableRange<float> (2000.0f, 18000.0f), 8000.0f, "Hz"));
+    
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "wave", 1 }, "Wave Freq", juce::NormalisableRange<float> (40.0f, 4000.0f), 220.0f, "Hz"));
+    
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "res", 1 }, "Resonance", juce::NormalisableRange<float> (0.0f, 0.97f), 0.6f));
+    
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "ring", 1 }, "Ring Freq", juce::NormalisableRange<float> (0.0f, 2000.0f), 0.0f, "Hz"));
+    
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "depth", 1 }, "Ring Depth", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
+    
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "mix", 1 }, "Mix", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
+    
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "out", 1 }, "Output", juce::NormalisableRange<float> (-40.0f, 12.0f), 0.0f, "dB"));
+    
+    params.push_back (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "bypass", 1 }, "Bypass", false));
 
     return { params.begin(), params.end() };
 }
