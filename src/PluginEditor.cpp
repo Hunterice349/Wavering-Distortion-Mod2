@@ -42,19 +42,21 @@ void MetalKnob::paint (juce::Graphics& g)
     g.setColour (juce::Colours::black.withAlpha (0.55f));
     for (int i = 0; i < 24; ++i)
     {
-        const float a = static_cast<float>(juce::degreesToRadians (225.0f + 270.0f * static_cast<float> (i) / 23.0f));
+        const float a = juce::degreesToRadians (225.0f + 270.0f * static_cast<float> (i) / 23.0f);
         g.drawLine (cx + (d * 0.5f - 3.0f) * std::cos (a), cy + (d * 0.5f - 3.0f) * std::sin (a),
                     cx + (d * 0.5f - 6.0f) * std::cos (a), cy + (d * 0.5f - 6.0f) * std::sin (a), 1.0f);
     }
 
+    // ИСПРАВЛЕНО: распаковка Rectangle<float> в x, y, width, height для addArc
     g.setColour (juce::Colour (0xff35e0ff).withAlpha (0.9f));
     juce::Path arcPath;
-    float startAngle = static_cast<float>(juce::degreesToRadians (225.0f));
-    float endAngle = static_cast<float>(juce::degreesToRadians (225.0f + 270.0f * n));
-    arcPath.addArc (body.expanded (7.0f), startAngle, endAngle, false);
+    auto arcRect = body.expanded (7.0f);
+    arcPath.addArc (arcRect.getX(), arcRect.getY(), arcRect.getWidth(), arcRect.getHeight(),
+                    juce::degreesToRadians (225.0f),
+                    juce::degreesToRadians (225.0f + 270.0f * static_cast<float> (n)), false);
     g.strokePath (arcPath, juce::PathStrokeType (2.0f));
 
-    const float a = static_cast<float>(juce::degreesToRadians (225.0f + 270.0f * n));
+    const float a = juce::degreesToRadians (225.0f + 270.0f * static_cast<float> (n));
     g.setColour (juce::Colours::black);
     g.drawLine (cx, cy, cx + (d * 0.5f - 9.0f) * std::cos (a), cy + (d * 0.5f - 9.0f) * std::sin (a), 3.0f);
     g.setColour (juce::Colours::white.withAlpha (0.7f));
@@ -96,7 +98,7 @@ void VuMeter::update()
 static float dbToAngle (float db)
 {
     const float t = juce::jlimit (0.0f, 1.0f, (db + 24.0f) / 27.0f);
-    return static_cast<float>(juce::degreesToRadians (195.0f + 150.0f * t));
+    return juce::degreesToRadians (195.0f + 150.0f * t);
 }
 
 void VuMeter::paint (juce::Graphics& g)
@@ -107,27 +109,28 @@ void VuMeter::paint (juce::Graphics& g)
     g.fillRoundedRectangle (b, 6.0f);
 
     const auto face = b.reduced (10.0f, 10.0f);
-    // ИСПРАВЛЕНО: Используем конструктор с 5-м аргументом 'true' для радиального градиента
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffefcf4), face.getCentre(), 
-                                             juce::Colour (0xffcfc8ba), face.getCentre().translated (face.getWidth() * 0.7f, 0.0f), true));
+    g.setGradientFill (juce::ColourGradient::radial (juce::Colour (0xfffefcf4), face.getCentre(), face.getWidth() * 0.7f, juce::Colour (0xffcfc8ba)));
     g.fillRoundedRectangle (face, 4.0f);
 
     const float cx = face.getCentreX();
     const float cy = face.getBottom() - 8.0f;
     const float R  = face.getHeight() - 34.0f;
 
+    // ИСПРАВЛЕНО 1: распаковка Rectangle<float> для основной шкалы
     g.setColour (juce::Colours::black);
     juce::Path scalePath;
-    scalePath.addArc (juce::Rectangle<float> (cx - R, cy - R, R * 2.0f, R * 2.0f),
-                      static_cast<float>(juce::degreesToRadians (195.0f)), 
-                      static_cast<float>(juce::degreesToRadians (195.0f + 150.0f)), false);
+    juce::Rectangle<float> scaleRect (cx - R, cy - R, R * 2.0f, R * 2.0f);
+    scalePath.addArc (scaleRect.getX(), scaleRect.getY(), scaleRect.getWidth(), scaleRect.getHeight(),
+                      juce::degreesToRadians (195.0f), juce::degreesToRadians (150.0f), false);
     g.strokePath (scalePath, juce::PathStrokeType (1.0f));
 
+    // ИСПРАВЛЕНО 2: распаковка Rectangle<float> для красной зоны
     g.setColour (juce::Colour (0xffd21f1a));
     const float redR = R - 9.0f;
     juce::Path redPath;
-    redPath.addArc (juce::Rectangle<float> (cx - redR, cy - redR, redR * 2.0f, redR * 2.0f),
-                    dbToAngle (0.0f), dbToAngle (3.0f), false);
+    juce::Rectangle<float> redRect (cx - redR, cy - redR, redR * 2.0f, redR * 2.0f);
+    redPath.addArc (redRect.getX(), redRect.getY(), redRect.getWidth(), redRect.getHeight(),
+                    dbToAngle (0.0f), dbToAngle (3.0f) - dbToAngle (0.0f), false);
     g.strokePath (redPath, juce::PathStrokeType (2.0f));
 
     static const float majors[] = { -20, -10, -7, -5, -3, -2, -1, 0, 1, 2, 3 };
@@ -153,7 +156,7 @@ void VuMeter::paint (juce::Graphics& g)
         const float ly = cy + lr * std::sin (a);
 
         g.saveState();
-        g.addTransform (juce::AffineTransform::rotation (a - static_cast<float>(juce::degreesToRadians (270.0f)), lx, ly));
+        g.addTransform (juce::AffineTransform::rotation (a - juce::degreesToRadians (270.0f), lx, ly));
         g.setColour (db > 0.0f ? juce::Colour (0xffd21f1a) : juce::Colours::black);
         const juce::String label = db < 0.0f ? juce::String (static_cast<int> (std::abs (db)))
                                              : (db == 0.0f ? "0" : "+" + juce::String (static_cast<int> (db)));
@@ -268,9 +271,7 @@ void RingScope::paint (juce::Graphics& g)
 void Led::paint (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat().reduced (1.0f);
-    // ИСПРАВЛЕНО: Используем конструктор с 5-м аргументом 'true' для радиального градиента
-    g.setGradientFill (juce::ColourGradient (colour.withAlpha (0.5f * glow), b.getCentre(), 
-                                             juce::Colours::transparentBlack, b.getCentre().translated (b.getWidth() * 1.4f, 0.0f), true));
+    g.setGradientFill (juce::ColourGradient::radial (colour.withAlpha (0.5f * glow), b.getCentre(), b.getWidth() * 1.4f, juce::Colours::transparentBlack));
     g.fillEllipse (b.expanded (b.getWidth()));
 
     g.setGradientFill (juce::ColourGradient (colour.brighter (0.6f), b.getX(), b.getY(),
