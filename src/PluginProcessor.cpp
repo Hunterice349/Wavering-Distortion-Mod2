@@ -15,69 +15,60 @@ juce::AudioProcessorValueTreeState::ParameterLayout WaveringAudioProcessor::crea
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "drive", 1 },
-        juce::AudioParameterFloat::Attributes()
-            .withName ("Drive")
-            .withRange (0.0f, 100.0f)
-            .withDefaultValue (20.0f)));
+        "Drive",
+        juce::NormalisableRange<float> (0.0f, 100.0f),
+        20.0f));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "tone", 1 },
-        juce::AudioParameterFloat::Attributes()
-            .withName ("Tone")
-            .withRange (2000.0f, 18000.0f)
-            .withDefaultValue (8000.0f)
-            .withLabel ("Hz")));
+        "Tone",
+        juce::NormalisableRange<float> (2000.0f, 18000.0f),
+        8000.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("Hz")));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "wave", 1 },
-        juce::AudioParameterFloat::Attributes()
-            .withName ("Wave Freq")
-            .withRange (40.0f, 4000.0f)
-            .withDefaultValue (220.0f)
-            .withLabel ("Hz")));
+        "Wave Freq",
+        juce::NormalisableRange<float> (40.0f, 4000.0f),
+        220.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("Hz")));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "res", 1 },
-        juce::AudioParameterFloat::Attributes()
-            .withName ("Resonance")
-            .withRange (0.0f, 0.97f)
-            .withDefaultValue (0.6f)));
+        "Resonance",
+        juce::NormalisableRange<float> (0.0f, 0.97f),
+        0.6f));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "ring", 1 },
-        juce::AudioParameterFloat::Attributes()
-            .withName ("Ring Freq")
-            .withRange (0.0f, 2000.0f)
-            .withDefaultValue (0.0f)
-            .withLabel ("Hz")));
+        "Ring Freq",
+        juce::NormalisableRange<float> (0.0f, 2000.0f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("Hz")));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "depth", 1 },
-        juce::AudioParameterFloat::Attributes()
-            .withName ("Ring Depth")
-            .withRange (0.0f, 1.0f)
-            .withDefaultValue (0.5f)));
+        "Ring Depth",
+        juce::NormalisableRange<float> (0.0f, 1.0f),
+        0.5f));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "mix", 1 },
-        juce::AudioParameterFloat::Attributes()
-            .withName ("Mix")
-            .withRange (0.0f, 1.0f)
-            .withDefaultValue (0.5f)));
+        "Mix",
+        juce::NormalisableRange<float> (0.0f, 1.0f),
+        0.5f));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "out", 1 },
-        juce::AudioParameterFloat::Attributes()
-            .withName ("Output")
-            .withRange (-40.0f, 12.0f)
-            .withDefaultValue (0.0f)
-            .withLabel ("dB")));
+        "Output",
+        juce::NormalisableRange<float> (-40.0f, 12.0f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("dB")));
 
     params.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { "bypass", 1 },
-        juce::AudioParameterBool::Attributes()
-            .withName ("Bypass")
-            .withDefaultValue (false)));
+        "Bypass",
+        false));
 
     return { params.begin(), params.end() };
 }
