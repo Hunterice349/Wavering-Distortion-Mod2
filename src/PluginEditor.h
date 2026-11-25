@@ -77,8 +77,10 @@ public:
 private:
     WaveringAudioProcessor& audioProcessor;
 
-    std::unique_ptr<VuMeter>   vu;
-    std::unique_ptr<RingScope> scope;
+    // These are constructed before the editor constructor body can call setSize(),
+    // which may synchronously invoke resized().
+    std::unique_ptr<VuMeter> vu { std::make_unique<VuMeter> (audioProcessor) };
+    std::unique_ptr<RingScope> scope { std::make_unique<RingScope> (audioProcessor) };
 
     MetalKnob driveKnob { "DRIVE" }, waveKnob { "WAVE" }, ringKnob { "RING" },
               resKnob   { "RES"  }, toneKnob  { "TONE" }, mixKnob  { "MIX" },
