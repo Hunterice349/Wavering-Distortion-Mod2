@@ -234,7 +234,7 @@ double WaveringAudioProcessor::getTailLengthSeconds() const
             });
 
         const double delaySeconds =
-            std::min (baseDelaySeconds * bandFactor, 2.25);
+            std::min (baseDelaySeconds * bandFactor, 2.29);
 
         const double feedback =
             0.92 * read ("spectralDelayFeedback") / 10.0;

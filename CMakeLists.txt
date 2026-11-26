@@ -41,9 +41,9 @@ target_link_libraries(WaveringDistortionMod PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags)
 
-# The DSP harness uses only DistortionDSP and the C++ standard library.
-# Keep it separate from the plugin targets and register it with CTest.
+# Keep the DSP test executables independent of JUCE and register each suite with CTest.
 enable_testing()
+
 add_executable(DistortionDSPTests
     tests/DSPTests.cpp
     src/DistortionDSP.cpp)
@@ -51,3 +51,24 @@ target_include_directories(DistortionDSPTests PRIVATE src)
 target_compile_features(DistortionDSPTests PRIVATE cxx_std_17)
 add_test(NAME DistortionDSPTests
          COMMAND DistortionDSPTests "${CMAKE_BINARY_DIR}/distortion_metrics.csv")
+
+add_executable(WaveguideDSPTests
+    tests/WaveguideDSPTests.cpp
+    src/WaveguideDSP.cpp)
+target_include_directories(WaveguideDSPTests PRIVATE src)
+target_compile_features(WaveguideDSPTests PRIVATE cxx_std_17)
+add_test(NAME WaveguideDSPTests COMMAND WaveguideDSPTests)
+
+add_executable(RingModulatorDSPTests
+    tests/RingModulatorDSPTests.cpp
+    src/RingModulatorDSP.cpp)
+target_include_directories(RingModulatorDSPTests PRIVATE src)
+target_compile_features(RingModulatorDSPTests PRIVATE cxx_std_17)
+add_test(NAME RingModulatorDSPTests COMMAND RingModulatorDSPTests)
+
+add_executable(SpectralDelayDSPTests
+    tests/SpectralDelayDSPTests.cpp
+    src/SpectralDelayDSP.cpp)
+target_include_directories(SpectralDelayDSPTests PRIVATE src)
+target_compile_features(SpectralDelayDSPTests PRIVATE cxx_std_17)
+add_test(NAME SpectralDelayDSPTests COMMAND SpectralDelayDSPTests)
