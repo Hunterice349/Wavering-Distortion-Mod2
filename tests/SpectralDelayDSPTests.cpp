@@ -82,7 +82,7 @@ void testDelayedImpulseAndFeedback()
     p.low = p.mid = p.high = 5.0f;
     p.feedback = 10.0f;
     p.width = 5.0f;
-    p.mix = 10.0f;
+    p.mix = 5.0f; // 50/50 blend: test both the immediate dry path and delayed wet path.
     p.enabled = true;
     for (const double rate : { 44100.0, 48000.0, 96000.0 })
     {

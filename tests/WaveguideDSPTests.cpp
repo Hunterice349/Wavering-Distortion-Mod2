@@ -96,8 +96,10 @@ void testResetAndFeedbackDecay()
                  "reset clears delay and damping state");
     }
 
+    WaveguideDSP::Parameters resonatorParameters = p;
+    resonatorParameters.enabled = true;
     WaveguideDSP decay;
-    decay.prepare (48000.0, p);
+    decay.prepare (48000.0, resonatorParameters);
     double earlyPeak = 0.0, latePeak = 0.0;
     for (int i = 0; i < 48000; ++i)
     {
