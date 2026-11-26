@@ -1,15 +1,272 @@
 name: Build Plugin
-on: [push, workflow_dispatch]
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Configure (JUCE скачается автоматически)
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configure (JUCE is fetched automatically)
         run: cmake -B build -S . -A x64
+
       - name: Build
         run: cmake --build build --config Release
-      - uses: actions/upload-artifact@v4
+
+      - name: Package Windows VST3
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE }}
+          WINDOWS_SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
+
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Locate the JUCE VST3 build output.
+          $vst3Root = Join-Path $env:GITHUB_WORKSPACE 'build/WaveringDistortionMod_artefacts/Release/VST3'
+
+          if (-not (Test-Path -LiteralPath $vst3Root)) {
+            throw "VST3 output directory not found: $vst3Root"
+          }
+
+          $bundles = @(
+            Get-ChildItem -LiteralPath $vst3Root -Directory -Filter '*.vst3'
+          )
+
+          if ($bundles.Count -ne 1) {
+            throw "Expected exactly one VST3 bundle, found $($bundles.Count)."
+          }
+
+          # Prepare clean packaging directories.
+          $packageRoot = Join-Path $env:GITHUB_WORKSPACE 'package'
+          $bundleTarget = Join-Path $packageRoot $bundles[0].Name
+
+          $archivePath = Join-Path $env:GITHUB_WORKSPACE 'WaveringDistortionMod-Windows-VST3.zip'
+          $archiveHashPath = "$archivePath.sha256"
+
+          Remove-Item -LiteralPath @(
+            $packageRoot,
+            $archivePath,
+            $archiveHashPath
+          ) -Recurse -Force -ErrorAction SilentlyContinue
+
+          New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+
+          Copy-Item -LiteralPath $bundles[0].FullName -Destination $packageRoot -Recurse
+
+          # Read project version from the existing CMakeLists.txt.
+          $versionMatch = Select-String `
+            -Path 'CMakeLists.txt' `
+            -Pattern '^\s*project\(WaveringDistortionMod\s+VERSION\s+([0-9][0-9A-Za-z.+-]*)\s*\)' |
+            Select-Object -First 1
+
+          if ($null -eq $versionMatch) {
+            throw 'Could not read project version from CMakeLists.txt.'
+          }
+
+          $projectVersion = $versionMatch.Matches[0].Groups[1].Value
+
+          @(
+            'Project: WaveringDistortionMod'
+            "Version: $projectVersion"
+            "Commit: $env:GITHUB_SHA"
+            "Build: Windows x64 Release"
+            "Format: VST3"
+          ) | Set-Content `
+            -LiteralPath (Join-Path $packageRoot 'BUILD-INFO.txt') `
+            -Encoding utf8
+
+          # Check optional Authenticode signing secrets.
+          $certificate = $env:WINDOWS_SIGNING_CERTIFICATE
+          $password = $env:WINDOWS_SIGNING_PASSWORD
+
+          if (
+            ([string]::IsNullOrWhiteSpace($certificate)) -xor
+            ([string]::IsNullOrWhiteSpace($password))
+          ) {
+            throw 'Both WINDOWS_SIGNING_CERTIFICATE and WINDOWS_SIGNING_PASSWORD must be configured together.'
+          }
+
+          if (-not [string]::IsNullOrWhiteSpace($certificate)) {
+
+            # Find all Windows executable binaries inside the VST3 bundle.
+            $binaries = @(
+              Get-ChildItem -LiteralPath $bundleTarget -File -Recurse |
+              Where-Object {
+                $_.Extension -in @('.vst3', '.dll', '.exe')
+              }
+            )
+
+            if ($binaries.Count -eq 0) {
+              throw 'No signable binaries found inside the VST3 bundle.'
+            }
+
+            # Locate SignTool in the Windows SDK.
+            $signtoolCommand = Get-Command signtool.exe -ErrorAction SilentlyContinue
+            $signtool = $null
+
+            if ($null -ne $signtoolCommand) {
+              $signtool = $signtoolCommand.Source
+            }
+            else {
+              $sdkBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+
+              if (-not (Test-Path -LiteralPath $sdkBin)) {
+                throw "Windows SDK directory not found: $sdkBin"
+              }
+
+              $sdkVersions = @(
+                Get-ChildItem -LiteralPath $sdkBin -Directory |
+                Where-Object {
+                  $_.Name -match '^\d+\.\d+\.\d+\.\d+$'
+                } |
+                Sort-Object -Property { [version]$_.Name } -Descending
+              )
+
+              foreach ($sdkVersion in $sdkVersions) {
+                $candidate = Join-Path $sdkVersion.FullName 'x64\signtool.exe'
+
+                if (Test-Path -LiteralPath $candidate) {
+                  $signtool = $candidate
+                  break
+                }
+              }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($signtool)) {
+              throw 'Could not locate x64 signtool.exe in the Windows SDK.'
+            }
+
+            Write-Host "Using SignTool: $signtool"
+
+            # Decode the supplied PFX certificate.
+            $certificatePath = Join-Path $env:RUNNER_TEMP 'wavering-distortion-signing.pfx'
+
+            try {
+              $certificateBytes = [Convert]::FromBase64String(
+                ($certificate -replace '\s', '')
+              )
+
+              [System.IO.File]::WriteAllBytes(
+                $certificatePath,
+                $certificateBytes
+              )
+
+              # Sign and verify each executable binary.
+              foreach ($binary in $binaries) {
+
+                Write-Host "Signing: $($binary.FullName)"
+
+                & $signtool sign `
+                  /f $certificatePath `
+                  /p $password `
+                  /fd SHA256 `
+                  /tr 'http://timestamp.digicert.com' `
+                  /td SHA256 `
+                  $binary.FullName
+
+                if ($LASTEXITCODE -ne 0) {
+                  throw "Signing failed: $($binary.Name)"
+                }
+
+                Write-Host "Verifying: $($binary.FullName)"
+
+                & $signtool verify /pa /v $binary.FullName
+
+                if ($LASTEXITCODE -ne 0) {
+                  throw "Signature verification failed: $($binary.Name)"
+                }
+              }
+
+              Write-Host 'Authenticode signing and verification completed.'
+
+            }
+            finally {
+              Remove-Item -LiteralPath $certificatePath -Force -ErrorAction SilentlyContinue
+            }
+
+          }
+          else {
+            Write-Host 'Signing secrets are not configured. Package will remain unsigned.'
+          }
+
+          # Generate SHA-256 manifest for all files inside the VST3 bundle.
+          $bundleFiles = @(
+            Get-ChildItem -LiteralPath $bundleTarget -File -Recurse |
+            Sort-Object FullName
+          )
+
+          if ($bundleFiles.Count -eq 0) {
+            throw 'The VST3 bundle contains no files.'
+          }
+
+          $manifestLines = foreach ($file in $bundleFiles) {
+
+            $relativePath = [System.IO.Path]::GetRelativePath(
+              $bundleTarget,
+              $file.FullName
+            ).Replace('\', '/')
+
+            $hash = (
+              Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256
+            ).Hash.ToLowerInvariant()
+
+            '{0}  {1}' -f $hash, $relativePath
+          }
+
+          Set-Content `
+            -LiteralPath (Join-Path $packageRoot 'CHECKSUMS.txt') `
+            -Value $manifestLines `
+            -Encoding utf8
+
+          # Create ZIP containing the VST3 bundle directory only.
+          Compress-Archive `
+            -Path $bundleTarget `
+            -DestinationPath $archivePath `
+            -CompressionLevel Optimal
+
+          if (-not (Test-Path -LiteralPath $archivePath)) {
+            throw 'VST3 ZIP archive was not created.'
+          }
+
+          # Generate SHA-256 checksum for the complete ZIP.
+          $archiveHash = (
+            Get-FileHash -LiteralPath $archivePath -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+
+          Set-Content `
+            -LiteralPath $archiveHashPath `
+            -Value ('{0}  {1}' -f $archiveHash, (Split-Path $archivePath -Leaf)) `
+            -Encoding utf8
+
+          Write-Host 'VST3 packaging completed successfully.'
+
+      - name: Upload Windows VST3 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: WaveringDistortionMod-Windows-VST3-package
+          path: |
+            WaveringDistortionMod-Windows-VST3.zip
+            WaveringDistortionMod-Windows-VST3.zip.sha256
+            package/CHECKSUMS.txt
+            package/BUILD-INFO.txt
+          if-no-files-found: error
+          compression-level: 0
+
+      # Preserve the original build artifact.
+      - name: Upload original Windows build
+        uses: actions/upload-artifact@v4
         with:
           name: WaveringDistortionMod-Windows
           path: build/WaveringDistortionMod_artefacts/Release
+          if-no-files-found: error
