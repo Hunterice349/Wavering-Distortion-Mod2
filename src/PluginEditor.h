@@ -12,7 +12,6 @@ class MetalKnob : public juce::Slider
 public:
     explicit MetalKnob (const juce::String& labelText);
     void paint (juce::Graphics&) override;
-
 private:
     juce::String labelText;
 };
@@ -28,32 +27,25 @@ class DistortionSwitch : public juce::Button
 {
 public:
     DistortionSwitch();
-    void paintButton (juce::Graphics&, bool shouldDrawButtonAsHighlighted,
-                      bool shouldDrawButtonAsDown) override;
+    void paintButton (juce::Graphics&, bool, bool) override;
 };
-
 class WaveguideSwitch : public juce::Button
 {
 public:
     WaveguideSwitch();
-    void paintButton (juce::Graphics&, bool shouldDrawButtonAsHighlighted,
-                      bool shouldDrawButtonAsDown) override;
+    void paintButton (juce::Graphics&, bool, bool) override;
 };
-
 class RingModSwitch : public juce::Button
 {
 public:
     RingModSwitch();
-    void paintButton (juce::Graphics&, bool shouldDrawButtonAsHighlighted,
-                      bool shouldDrawButtonAsDown) override;
+    void paintButton (juce::Graphics&, bool, bool) override;
 };
-
 class SpectralDelaySwitch : public juce::Button
 {
 public:
     SpectralDelaySwitch();
-    void paintButton (juce::Graphics&, bool shouldDrawButtonAsHighlighted,
-                      bool shouldDrawButtonAsDown) override;
+    void paintButton (juce::Graphics&, bool, bool) override;
 };
 
 class WaveringAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -66,23 +58,20 @@ private:
     {
     public:
         std::function<void (juce::Graphics&)> paintContent;
-        void paint (juce::Graphics& g) override
-        {
-            if (paintContent)
-                paintContent (g);
-        }
+        void paint (juce::Graphics& g) override { if (paintContent) paintContent (g); }
     };
 
 public:
     explicit WaveringAudioProcessorEditor (WaveringAudioProcessor&);
     ~WaveringAudioProcessorEditor() override;
-
     void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
     static constexpr int designWidth = 760;
     static constexpr int designHeight = 1040;
+    static constexpr int toolbarHeight = 36;
+    static constexpr int viewportHeight = 680;
     void paintDesign (juce::Graphics&);
     void applyScaleMode (int selectedItemId);
     void comboBoxChanged (juce::ComboBox*) override;
@@ -90,24 +79,25 @@ private:
     void handleAsyncUpdate() override;
 
     WaveringAudioProcessor& audioProcessor;
+    juce::Viewport viewport;
+    juce::Component viewportContent;
     ScaledContent scaledContent;
     juce::Label scaleLabel;
     juce::ComboBox scaleSelector;
     std::atomic<int> pendingScaleChoice { 1 };
+    float currentScale = 1.0f;
 
-    MetalKnob driveKnob { "DRIVE" }, toneKnob { "TONE" }, biasKnob { "BIAS" },
-              bodyKnob { "BODY" }, mixKnob { "MIX" };
+    MetalKnob driveKnob { "DRIVE" }, toneKnob { "TONE" }, biasKnob { "BIAS" }, bodyKnob { "BODY" }, mixKnob { "MIX" };
     DistortionSwitch distortionSwitch;
     MetalKnob rateKnob { "RATE" }, resonanceKnob { "RESONANCE" }, feedbackKnob { "FEEDBACK" },
               dampingKnob { "DAMPING" }, characterKnob { "CHARACTER" }, waveMixKnob { "MIX" };
     WaveguideSwitch waveguideSwitch;
-    MetalKnob ringRateKnob { "RATE" }, ringDepthKnob { "DEPTH" }, ringFineKnob { "FINE" },
-              ringMixKnob { "MIX" };
+    MetalKnob ringRateKnob { "RATE" }, ringDepthKnob { "DEPTH" }, ringFineKnob { "FINE" }, ringMixKnob { "MIX" };
     WaveformKnob ringWaveformSelector;
     RingModSwitch ringModSwitch;
     MetalKnob spectralTimeKnob { "TIME" }, spectralLowKnob { "LOW" }, spectralMidKnob { "MID" },
-              spectralHighKnob { "HIGH" }, spectralFeedbackKnob { "FEEDBACK" },
-              spectralWidthKnob { "WIDTH" }, spectralMixKnob { "MIX" };
+              spectralHighKnob { "HIGH" }, spectralFeedbackKnob { "FEEDBACK" }, spectralWidthKnob { "WIDTH" },
+              spectralMixKnob { "MIX" };
     SpectralDelaySwitch spectralDelaySwitch;
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
@@ -116,6 +106,5 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ringModSwitchAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> spectralDelaySwitchAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> ringWaveformAttachment;
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringAudioProcessorEditor)
 };
