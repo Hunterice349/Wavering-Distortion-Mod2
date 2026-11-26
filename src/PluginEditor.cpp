@@ -109,7 +109,9 @@ void VuMeter::paint (juce::Graphics& g)
     g.fillRoundedRectangle (b, 6.0f);
 
     const auto face = b.reduced (10.0f, 10.0f);
-    g.setGradientFill (juce::ColourGradient::radial (juce::Colour (0xfffefcf4), face.getCentre(), face.getWidth() * 0.7f, juce::Colour (0xffcfc8ba)));
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffefcf4), face.getCentreX(), face.getCentreY(),
+                                             juce::Colour (0xffcfc8ba), face.getCentreX() + face.getWidth() * 0.7f,
+                                             face.getCentreY(), true));
     g.fillRoundedRectangle (face, 4.0f);
 
     const float cx = face.getCentreX();
@@ -271,7 +273,11 @@ void RingScope::paint (juce::Graphics& g)
 void Led::paint (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat().reduced (1.0f);
-    g.setGradientFill (juce::ColourGradient::radial (colour.withAlpha (0.5f * glow), b.getCentre(), b.getWidth() * 1.4f, juce::Colours::transparentBlack));
+    const auto glowCentre = b.getCentre();
+    const float glowRadius = b.getWidth() * 1.4f;
+    g.setGradientFill (juce::ColourGradient (colour.withAlpha (0.5f * glow), glowCentre.x, glowCentre.y,
+                                             juce::Colours::transparentBlack, glowCentre.x + glowRadius,
+                                             glowCentre.y, true));
     g.fillEllipse (b.expanded (b.getWidth()));
 
     g.setGradientFill (juce::ColourGradient (colour.brighter (0.6f), b.getX(), b.getY(),
