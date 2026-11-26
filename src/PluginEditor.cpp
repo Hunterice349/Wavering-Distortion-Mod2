@@ -218,8 +218,6 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     scaledContent.addAndMakeVisible (ringMixKnob);
     scaledContent.addAndMakeVisible (ringModSwitch);
 
-    // ComboBoxListener is used instead of ComboBoxAttachment so the scale action
-    // and APVTS automation/state updates have a single, explicit change path.
     const auto storedChoice = audioProcessor.apvts.getRawParameterValue ("uiScale")->load();
     const int selectedItemId = juce::jlimit (1, 3, static_cast<int> (std::lround (storedChoice)) + 1);
     scaleSelector.setSelectedId (selectedItemId, juce::dontSendNotification);
@@ -276,8 +274,6 @@ void WaveringAudioProcessorEditor::applyScaleMode (int selectedItemId)
     const int itemId = juce::jlimit (1, 3, selectedItemId);
     const float scale = itemId == 1 ? 0.5f : (itemId == 3 ? 2.0f : 1.0f);
 
-    // Scale a single child root. JUCE transforms child painting and hit testing,
-    // while the editor peer is sized to the resulting transformed design bounds.
     scaledContent.setTransform (juce::AffineTransform::scale (scale));
     setSize (juce::roundToInt (designWidth * scale), juce::roundToInt (designHeight * scale));
 }
@@ -303,12 +299,14 @@ void WaveringAudioProcessorEditor::paintDesign (juce::Graphics& g)
     g.setColour (juce::Colour (0xffd3d9d9).withAlpha (0.25f));
     g.drawRoundedRectangle (face.reduced (1.0f), 10.0f, 1.0f);
 
+    // Reserve the header's right side for the scale selector, so title and
+    // subtitle remain legible without overlapping at every selected scale.
     g.setFont (juce::Font (22.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xfff0e7d8));
-    g.drawText ("HUNTERICE  /  WAVERING DISTORTION", 35, 25, designWidth - 70, 30, juce::Justification::centred);
+    g.drawText ("HUNTERICE  /  WAVERING DISTORTION", 35, 25, 510, 30, juce::Justification::centred);
     g.setFont (juce::Font (10.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xffffbd68));
-    g.drawText ("ANALOG-INSPIRED SATURATION  •  MODULAR EFFECTS", 35, 55, designWidth - 70, 18,
+    g.drawText ("ANALOG-INSPIRED SATURATION  •  MODULAR EFFECTS", 35, 55, 510, 18,
                 juce::Justification::centred);
 
     const juce::Rectangle<float> distortionPanel (38.0f, 95.0f, designWidth - 76.0f, 165.0f);
@@ -336,8 +334,6 @@ void WaveringAudioProcessorEditor::paintDesign (juce::Graphics& g)
 
 void WaveringAudioProcessorEditor::resized()
 {
-    // Keep layout in design coordinates; the content root transform is the one
-    // and only user-selected scale operation.
     scaledContent.setBounds (0, 0, designWidth, designHeight);
     constexpr int knobWidth = 100;
     constexpr int knobHeight = 142;
@@ -373,8 +369,7 @@ void WaveringAudioProcessorEditor::resized()
     ringMixKnob.setBounds (x, 583, ringKnobWidth, knobHeight);
     ringModSwitch.setBounds (designWidth / 2 - 88, 745, 176, 44);
 
-    // Put the global UI option at the lower-right of the footer, clear of the
-    // Ring Mod switch and the centered effect-chain caption.
-    scaleLabel.setBounds (538, 770, 74, 22);
-    scaleSelector.setBounds (615, 768, 94, 26);
+    // Place the scale controls in the reserved top-right header area.
+    scaleLabel.setBounds (560, 20, 72, 22);
+    scaleSelector.setBounds (636, 18, 94, 26);
 }
