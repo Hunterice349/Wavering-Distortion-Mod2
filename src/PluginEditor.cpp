@@ -5,7 +5,7 @@ MetalKnob::MetalKnob (const juce::String& text) : labelText (text)
     setSliderStyle (juce::Slider::RotaryVerticalDrag);
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     setRange (0.0, 10.0, 0.01);
-    setDoubleClick возв (0.0);
+    setDoubleClickReturnValue (true, 0.0);
 }
 
 void MetalKnob::paint (juce::Graphics& g)
@@ -65,15 +65,16 @@ void DistortionSwitch::paintButton (juce::Graphics& g, bool highlighted, bool do
 {
     const auto bounds = getLocalBounds().toFloat();
     const bool enabled = getToggleState();
+    const auto track = bounds.withHeight (juce::jmin (25.0f, bounds.getHeight()));
     g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillRoundedRectangle (bounds.translated (1.0f, 3.0f), 7.0f);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd5d9dc), bounds.getX(), bounds.getY(),
-                                              juce::Colour (0xff41484d), bounds.getX(), bounds.getBottom(), false));
-    g.fillRoundedRectangle (bounds, 7.0f);
+    g.fillRoundedRectangle (track.translated (1.0f, 2.0f), 7.0f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd5d9dc), track.getX(), track.getY(),
+                                              juce::Colour (0xff41484d), track.getX(), track.getBottom(), false));
+    g.fillRoundedRectangle (track, 7.0f);
 
-    const float travel = bounds.getWidth() - 35.0f;
-    const float x = enabled ? bounds.getX() + travel : bounds.getX() + 5.0f;
-    juce::Rectangle<float> toggle (x, bounds.getY() + 4.0f, 30.0f, bounds.getHeight() - 8.0f);
+    const float travel = track.getWidth() - 35.0f;
+    const float x = enabled ? track.getX() + travel : track.getX() + 5.0f;
+    juce::Rectangle<float> toggle (x, track.getY() + 3.0f, 30.0f, track.getHeight() - 6.0f);
     if (down || highlighted)
         toggle = toggle.reduced (0.5f);
     g.setColour (juce::Colours::black.withAlpha (0.5f));
@@ -82,10 +83,12 @@ void DistortionSwitch::paintButton (juce::Graphics& g, bool highlighted, bool do
                                               juce::Colour (0xff737b80), toggle.getRight(), toggle.getBottom(), false));
     g.fillRoundedRectangle (toggle, 5.0f);
     g.setColour (enabled ? juce::Colour (0xff64ff9c) : juce::Colour (0xff572a26));
-    g.fillEllipse (bounds.getX() + bounds.getWidth() * 0.5f - 4.0f, bounds.getCentreY() - 4.0f, 8.0f, 8.0f);
+    g.fillEllipse (track.getCentreX() - 4.0f, track.getCentreY() - 4.0f, 8.0f, 8.0f);
     g.setFont (juce::Font (10.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xfff4ead8));
-    g.drawText (enabled ? "DISTORTION  ON" : "DISTORTION  OFF", bounds.translated (0.0f, bounds.getHeight() + 3.0f),
+    g.drawText (enabled ? "DISTORTION  ON" : "DISTORTION  OFF",
+                juce::Rectangle<float> (bounds.getX(), track.getBottom() + 2.0f,
+                                        bounds.getWidth(), bounds.getHeight() - track.getHeight() - 2.0f),
                 juce::Justification::centred);
 }
 
@@ -170,5 +173,5 @@ void WaveringAudioProcessorEditor::resized()
     biasKnob.setBounds (x, y, knobWidth, knobHeight); x += knobWidth + gap;
     bodyKnob.setBounds (x, y, knobWidth, knobHeight); x += knobWidth + gap;
     mixKnob.setBounds (x, y, knobWidth, knobHeight);
-    distortionSwitch.setBounds (getWidth() / 2 - 88, 308, 176, 27);
+    distortionSwitch.setBounds (getWidth() / 2 - 88, 303, 176, 44);
 }

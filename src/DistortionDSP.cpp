@@ -1,5 +1,10 @@
 #include "DistortionDSP.h"
 
+namespace
+{
+constexpr float pi = 3.14159265358979323846f;
+}
+
 void DistortionDSP::Smoother::reset (int rampSamples, float value) noexcept
 {
     rampLength = std::max (1, rampSamples);
@@ -34,11 +39,11 @@ void DistortionDSP::prepare (double newSampleRate, const Parameters& initial) no
     sampleRate = std::isfinite (newSampleRate) && newSampleRate > 1.0 ? newSampleRate : 44100.0;
     smoothingSamples = std::max (1, static_cast<int> (std::lround (sampleRate * 0.012)));
 
-    driveSmoother.reset (smoothingSamples, std::clamp (initial.drive, 0.0f, 10.0f));
-    toneSmoother.reset (smoothingSamples, std::clamp (initial.tone, 0.0f, 10.0f));
-    biasSmoother.reset (smoothingSamples, std::clamp (initial.bias, 0.0f, 10.0f));
-    bodySmoother.reset (smoothingSamples, std::clamp (initial.body, 0.0f, 10.0f));
-    mixSmoother.reset (smoothingSamples, std::clamp (initial.mix, 0.0f, 10.0f) * 0.1f);
+    driveSmoother.reset (smoothingSamples, std::clamp (finiteOrZero (initial.drive), 0.0f, 10.0f));
+    toneSmoother.reset (smoothingSamples, std::clamp (finiteOrZero (initial.tone), 0.0f, 10.0f));
+    biasSmoother.reset (smoothingSamples, std::clamp (finiteOrZero (initial.bias), 0.0f, 10.0f));
+    bodySmoother.reset (smoothingSamples, std::clamp (finiteOrZero (initial.body), 0.0f, 10.0f));
+    mixSmoother.reset (smoothingSamples, std::clamp (finiteOrZero (initial.mix), 0.0f, 10.0f) * 0.1f);
     enableSmoother.reset (smoothingSamples, initial.enabled ? 1.0f : 0.0f);
     reset();
 }
@@ -82,8 +87,8 @@ float DistortionDSP::processChannel (float input, float& toneState, float toneCo
     const float boundedInput = std::clamp (finiteOrZero (input), -8.0f, 8.0f);
     float shaped = boundedInput;
 
-    // At zero drive the waveshaper is deliberately bypassed, so no extra
-    // nonlinear distortion is introduced by this control's zero position.
+    // At zero drive the waveshaper is deliberately bypassed. Tone remains an
+    // independent post-shaper control, while no nonlinear distortion is added.
     if (drive > 1.0e-5f)
     {
         const float driveAmount = drive * 0.1f;
@@ -98,6 +103,7 @@ float DistortionDSP::processChannel (float input, float& toneState, float toneCo
             return smooth + bodyBlend * (dense - smooth);
         };
 
+        // Subtract the curve's zero-input value to avoid bias-induced DC.
         const float biasOffset = curve (asymmetry);
         const float positive = curve (gain + asymmetry) - biasOffset;
         const float negative = biasOffset - curve (-gain + asymmetry);
@@ -125,16 +131,17 @@ void DistortionDSP::processFrame (float inputLeft, float inputRight, bool stereo
     const float toneNormalised = tone * 0.1f;
     const float cutoff = 350.0f * std::pow (18000.0f / 350.0f, toneNormalised);
     const float safeCutoff = std::min (cutoff, static_cast<float> (sampleRate * 0.45));
-    const float toneCoefficient = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi
-                                                   * safeCutoff / static_cast<float> (sampleRate));
+    const float toneCoefficient = 1.0f - std::exp (-2.0f * pi * safeCutoff / static_cast<float> (sampleRate));
 
     const float dryLeft = finiteOrZero (inputLeft);
     const float dryRight = stereo ? finiteOrZero (inputRight) : dryLeft;
 
+    // A fully bypassed switch is bit-transparent, including for samples outside
+    // the plugin's normal operating range. The transition is ramped before here.
     if (enabled <= 0.0f)
     {
-        outputLeft = dryLeft;
-        outputRight = stereo ? dryRight : 0.0f;
+        outputLeft = inputLeft;
+        outputRight = stereo ? inputRight : 0.0f;
         return;
     }
 
@@ -142,8 +149,10 @@ void DistortionDSP::processFrame (float inputLeft, float inputRight, bool stereo
     const float wetRight = stereo ? processChannel (dryRight, toneStateRight, toneCoefficient, drive, bias, body)
                                   : wetLeft;
 
-    const float mixedLeft = dryLeft + (wetLeft - dryLeft) * mix;
-    const float mixedRight = dryRight + (wetRight - dryRight) * mix;
-    outputLeft = dryLeft + (safeOutput (mixedLeft) - dryLeft) * enabled;
-    outputRight = stereo ? dryRight + (safeOutput (mixedRight) - dryRight) * enabled : 0.0f;
+    // Preserve a true dry path at MIX=0 instead of passing it through the safety
+    // saturator. The limiter only catches peaks on the processed blend.
+    const float mixedLeft = mix <= 0.0f ? dryLeft : safeOutput (dryLeft + (wetLeft - dryLeft) * mix);
+    const float mixedRight = mix <= 0.0f ? dryRight : safeOutput (dryRight + (wetRight - dryRight) * mix);
+    outputLeft = dryLeft + (mixedLeft - dryLeft) * enabled;
+    outputRight = stereo ? dryRight + (mixedRight - dryRight) * enabled : 0.0f;
 }
