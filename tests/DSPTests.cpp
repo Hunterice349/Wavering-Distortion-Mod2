@@ -44,8 +44,17 @@ struct Metrics
             ++nearFullScale;
     }
 
-    double dc() const { return count == 0 ? 0.0 : sum / static_cast<double> (count - nonFinite); }
-    double rms() const { return count == 0 ? 0.0 : std::sqrt (sumSquares / static_cast<double> (count - nonFinite)); }
+    double dc() const
+    {
+        const auto validCount = count - nonFinite;
+        return validCount == 0 ? 0.0 : sum / static_cast<double> (validCount);
+    }
+
+    double rms() const
+    {
+        const auto validCount = count - nonFinite;
+        return validCount == 0 ? 0.0 : std::sqrt (sumSquares / static_cast<double> (validCount));
+    }
 };
 
 void require (bool condition, const std::string& message)
@@ -259,7 +268,7 @@ void benchmarkCpu (std::ofstream& csv)
             const double realtimePercent = elapsed / (static_cast<double> (frames) / 48000.0) * 100.0;
             csv << "cpu_approx,synthetic_sine," << 48000 << ",0," << (stereo ? "stereo" : "mono")
                 << ',' << p.drive << ',' << p.tone << ',' << p.bias << ',' << p.body << ',' << p.mix
-                << ",,,,," << std::setprecision (10) << nsPerFrame << ',' << realtimePercent
+                << ",,,," << std::setprecision (10) << nsPerFrame << ',' << realtimePercent
                 << ",includes_signal_generation_and_loop_overhead\n";
             std::cout << "Approximate CPU benchmark (includes sine generation and loop overhead): "
                       << (stereo ? "stereo" : "mono") << ", drive=" << drive
