@@ -1,3 +1,4 @@
+
 name: Build Plugin
 
 on:
@@ -51,7 +52,7 @@ jobs:
 
       # Validate the compiled VST3 in a test host.
       - name: Validate Windows VST3 with pluginval
-        uses: Tracktion/pluginval/validate@v2
+        uses: Tracktion/pluginval/validate@286684f72062250fd2494681b7ebdcb721f09e0d
         with:
           plugins: |
             build/WaveringDistortionMod_artefacts/Release/VST3/*.vst3
@@ -315,6 +316,3 @@ jobs:
           name: WaveringDistortionMod-Windows
           path: build/WaveringDistortionMod_artefacts/Release
           if-no-files-found: error
-
-
-
