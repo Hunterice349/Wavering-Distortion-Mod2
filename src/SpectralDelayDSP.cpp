@@ -180,8 +180,9 @@ float SpectralDelayDSP::readDelay (const std::vector<float>& line, float delaySa
 void SpectralDelayDSP::splitBands (float input, CrossoverState& state,
                                    float& low, float& mid, float& high) noexcept
 {
-    // Two cascaded Butterworth sections per branch make fourth-order
-    // Linkwitz-Riley crossovers whose low/high branches sum phase-coherently.
+    // Each two-pole Butterworth branch is cascaded to produce LR4 sections.
+    // The second crossover acts on the low-crossover high branch, so the
+    // three bands sum coherently when their delay times are equal.
     low = state.lowPass2.process (state.lowPass1.process (input));
     const float aboveLow = state.lowCutHighPass2.process (state.lowCutHighPass1.process (input));
     mid = state.midLowPass2.process (state.midLowPass1.process (aboveLow));
@@ -217,21 +218,12 @@ void SpectralDelayDSP::processFrame (float inputLeft, float inputRight, bool ste
         return;
     }
 
-    if (mix <= 0.0f)
-    {
-        outputLeft = inputLeft;
-        outputRight = stereo ? inputRight : 0.0f;
-        return;
-    }
-
     const float dryLeft = bounded (inputLeft, maximumSignal);
     const float dryRight = stereo ? bounded (inputRight, maximumSignal) : dryLeft;
-    float lowL, midL, highL, lowR, midR, highR;
+    float lowL, midL, highL, lowR = 0.0f, midR = 0.0f, highR = 0.0f;
     splitBands (dryLeft, crossovers[0], lowL, midL, highL);
     if (stereo)
         splitBands (dryRight, crossovers[1], lowR, midR, highR);
-    else
-        lowR = midR = highR = 0.0f;
 
     // TIME is exponential 10 ms..1.5 s. Band controls scale this base from
     // 0.5x..1.5x with 5 neutral. The allocation accommodates the 2.25 s maximum.
@@ -248,32 +240,42 @@ void SpectralDelayDSP::processFrame (float inputLeft, float inputRight, bool ste
     const float lowDelay = delaySamplesFor (lowTime);
     const float midDelay = delaySamplesFor (midTime);
     const float highDelay = delaySamplesFor (highTime);
-    const float wetL = processBand (lowL, delayLines[0], lowDelay, feedback)
-                       + processBand (midL, delayLines[1], midDelay, feedback)
-                       + processBand (highL, delayLines[2], highDelay, feedback);
+
+    // Do not feed fresh input into the delay network while bypassed or with a
+    // zero mix. Existing echoes continue to decay under bounded feedback.
+    const float inputGate = (mix > 0.0f ? enabled : 0.0f);
+    const float wetL = processBand (lowL * inputGate, delayLines[0], lowDelay, feedback)
+                       + processBand (midL * inputGate, delayLines[1], midDelay, feedback)
+                       + processBand (highL * inputGate, delayLines[2], highDelay, feedback);
     float wetR = wetL;
     if (stereo)
-        wetR = processBand (lowR, delayLines[3], lowDelay, feedback)
-               + processBand (midR, delayLines[4], midDelay, feedback)
-               + processBand (highR, delayLines[5], highDelay, feedback);
+        wetR = processBand (lowR * inputGate, delayLines[3], lowDelay, feedback)
+               + processBand (midR * inputGate, delayLines[4], midDelay, feedback)
+               + processBand (highR * inputGate, delayLines[5], highDelay, feedback);
 
-    const float width = widthControl * 2.0f;
-    if (stereo)
+    if (enabled <= 0.0f || mix <= 0.0f)
     {
+        outputLeft = inputLeft;
+        outputRight = stereo ? inputRight : 0.0f;
+    }
+    else if (stereo)
+    {
+        // 0 is mono, 5 is neutral, and 10 widens by at most 50 percent.
+        // The moderate cap limits peak growth and avoids extreme channel inversion.
+        const float width = std::min (0.5f + widthControl, 1.5f);
         const float mid = 0.5f * (wetL + wetR);
         const float side = 0.5f * (wetL - wetR) * width;
-        wetR = mid - side;
-        // wetL retains the original; reconstruct both channels consistently.
         const float widenedLeft = mid + side;
-        const float mixL = dryLeft + (bounded (widenedLeft, maximumSignal) - dryLeft) * mix;
-        const float mixR = dryRight + (bounded (wetR, maximumSignal) - dryRight) * mix;
-        outputLeft = finiteOrZero (bounded (dryLeft + (mixL - dryLeft) * enabled, maximumSignal));
-        outputRight = finiteOrZero (bounded (dryRight + (mixR - dryRight) * enabled, maximumSignal));
+        const float widenedRight = mid - side;
+        const float wetBlendLeft = dryLeft + (bounded (widenedLeft, maximumSignal) - dryLeft) * mix;
+        const float wetBlendRight = dryRight + (bounded (widenedRight, maximumSignal) - dryRight) * mix;
+        outputLeft = bounded (dryLeft + (wetBlendLeft - dryLeft) * enabled, maximumSignal);
+        outputRight = bounded (dryRight + (wetBlendRight - dryRight) * enabled, maximumSignal);
     }
     else
     {
-        const float mixL = dryLeft + (bounded (wetL, maximumSignal) - dryLeft) * mix;
-        outputLeft = finiteOrZero (bounded (dryLeft + (mixL - dryLeft) * enabled, maximumSignal));
+        const float wetBlend = dryLeft + (bounded (wetL, maximumSignal) - dryLeft) * mix;
+        outputLeft = bounded (dryLeft + (wetBlend - dryLeft) * enabled, maximumSignal);
         outputRight = 0.0f;
     }
 

@@ -1,5 +1,12 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <cmath>
+
+namespace
+{
+constexpr double tailThreshold = 0.001; // -60 dB amplitude
+constexpr double maxTailSeconds = 180.0;
+}
 
 WaveringAudioProcessor::WaveringAudioProcessor()
     : AudioProcessor (BusesProperties().withInput  ("Input", juce::AudioChannelSet::stereo(), true)
@@ -70,7 +77,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout WaveringAudioProcessor::crea
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { "ringEnabled", 1 }, "Ring Mod On", false));
 
-    // Preserve the serialized legacy indices: 0=50%, 1=100%, 2=200%.
     parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { "uiScale", 1 }, "UI Scale",
         juce::StringArray { "50%", "100%", "200%", "60%", "70%", "80%", "90%" }, 1));
@@ -151,6 +157,30 @@ SpectralDelayDSP::Parameters WaveringAudioProcessor::readSpectralDelayParameters
     parameters.mix = apvts.getRawParameterValue ("spectralDelayMix")->load();
     parameters.enabled = apvts.getRawParameterValue ("spectralDelayEnabled")->load() > 0.5f;
     return parameters;
+}
+
+double WaveringAudioProcessor::getTailLengthSeconds() const
+{
+    if (apvts.getRawParameterValue ("spectralDelayEnabled")->load() <= 0.5f
+        || apvts.getRawParameterValue ("spectralDelayMix")->load() <= 0.0f)
+        return 0.0;
+
+    const auto read = [this] (const char* id) noexcept
+    {
+        return std::clamp (apvts.getRawParameterValue (id)->load(), 0.0f, 10.0f);
+    };
+
+    const double baseSeconds = 0.01 * std::pow (150.0, static_cast<double> (read ("spectralDelayTime")) * 0.1);
+    const double bandFactor = 0.5 + 0.1 * std::max ({ read ("spectralDelayLow"),
+                                                       read ("spectralDelayMid"),
+                                                       read ("spectralDelayHigh") });
+    const double delaySeconds = std::clamp (baseSeconds * bandFactor, 0.01, 2.25);
+    const double feedback = 0.92 * static_cast<double> (read ("spectralDelayFeedback")) * 0.1;
+    if (feedback <= 0.0)
+        return delaySeconds;
+
+    const double repeatsToThreshold = std::ceil (std::log (tailThreshold) / std::log (feedback));
+    return std::clamp (delaySeconds * (1.0 + repeatsToThreshold), delaySeconds, maxTailSeconds);
 }
 
 bool WaveringAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
