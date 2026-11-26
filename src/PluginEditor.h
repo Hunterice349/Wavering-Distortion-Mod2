@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <functional>
 #include "PluginProcessor.h"
 
 class MetalKnob : public juce::Slider
@@ -47,6 +48,18 @@ public:
 
 class WaveringAudioProcessorEditor : public juce::AudioProcessorEditor
 {
+private:
+    class ScaledContent : public juce::Component
+    {
+    public:
+        std::function<void (juce::Graphics&)> paintContent;
+        void paint (juce::Graphics& g) override
+        {
+            if (paintContent)
+                paintContent (g);
+        }
+    };
+
 public:
     explicit WaveringAudioProcessorEditor (WaveringAudioProcessor&);
     ~WaveringAudioProcessorEditor() override = default;
@@ -55,7 +68,17 @@ public:
     void resized() override;
 
 private:
+    static constexpr int designWidth = 760;
+    static constexpr int designHeight = 820;
+    void paintDesign (juce::Graphics&);
+    void applyScaleMode (int selectedItemId);
+
     WaveringAudioProcessor& audioProcessor;
+    ScaledContent scaledContent;
+    juce::Label scaleLabel;
+    juce::ComboBox scaleSelector;
+    float userScale = 1.0f;
+
     MetalKnob driveKnob { "DRIVE" }, toneKnob { "TONE" }, biasKnob { "BIAS" },
               bodyKnob { "BODY" }, mixKnob { "MIX" };
     DistortionSwitch distortionSwitch;
@@ -66,6 +89,7 @@ private:
               ringMixKnob { "MIX" };
     WaveformKnob ringWaveformSelector;
     RingModSwitch ringModSwitch;
+
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> switchAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> waveguideSwitchAttachment;
