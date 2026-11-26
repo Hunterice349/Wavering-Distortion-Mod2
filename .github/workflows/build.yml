@@ -1,3 +1,4 @@
+
 name: Build Plugin
 
 on:
@@ -8,6 +9,32 @@ permissions:
   contents: read
 
 jobs:
+  dsp-tests:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configure CMake
+        run: cmake -B build -S . -A x64
+
+      - name: Build DistortionDSPTests
+        run: cmake --build build --config Release --target DistortionDSPTests
+
+      - name: Run CTest
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Upload distortion metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: distortion-metrics
+          path: build/distortion_metrics.csv
+          if-no-files-found: warn
+
   build:
     runs-on: windows-latest
 
