@@ -40,3 +40,14 @@ target_link_libraries(WaveringDistortionMod PRIVATE
     juce::juce_audio_utils
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags)
+
+# The DSP harness uses only DistortionDSP and the C++ standard library.
+# Keep it separate from the plugin targets and register it with CTest.
+enable_testing()
+add_executable(DistortionDSPTests
+    tests/DSPTests.cpp
+    src/DistortionDSP.cpp)
+target_include_directories(DistortionDSPTests PRIVATE src)
+target_compile_features(DistortionDSPTests PRIVATE cxx_std_17)
+add_test(NAME DistortionDSPTests
+         COMMAND DistortionDSPTests "${CMAKE_BINARY_DIR}/distortion_metrics.csv")
