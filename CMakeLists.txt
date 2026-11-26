@@ -18,6 +18,8 @@ juce_add_plugin(WaveringDistortionMod
     COPY_PLUGIN_AFTER_BUILD TRUE)
 
 target_sources(WaveringDistortionMod PRIVATE
+    src/DistortionDSP.cpp
+    src/DistortionDSP.h
     src/PluginProcessor.cpp
     src/PluginProcessor.h
     src/PluginEditor.cpp
