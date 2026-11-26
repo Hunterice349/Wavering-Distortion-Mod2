@@ -70,6 +70,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout WaveringAudioProcessor::crea
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { "ringEnabled", 1 }, "Ring Mod On", false));
 
+    // Choice order is stable: 50%, 100%, 200%. The default preserves the
+    // existing 100% layout and is serialized with the normal APVTS state.
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "uiScale", 1 }, "UI Scale",
+        juce::StringArray { "50%", "100%", "200%" }, 1));
+
     return { parameters.begin(), parameters.end() };
 }
 

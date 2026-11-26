@@ -81,18 +81,17 @@ void WaveformKnob::paint (juce::Graphics& g)
                                               juce::Colour (0xff59636a), cx, face.getBottom(), false));
     g.fillEllipse (face);
 
+    const int selected = juce::jlimit (0, 3, static_cast<int> (std::round (getValue())));
     for (int i = 0; i < 4; ++i)
     {
         const float a = juce::degreesToRadians (135.0f + 90.0f * static_cast<float> (i));
         const float outer = radius + 8.0f;
-        const int selected = juce::jlimit (0, 3, static_cast<int> (std::round (getValue())));
         const float inner = outer - (i == selected ? 7.0f : 4.0f);
         g.setColour (i == selected ? juce::Colour (0xffffbd68) : juce::Colours::black.withAlpha (0.75f));
         g.drawLine (cx + inner * std::cos (a), cy + inner * std::sin (a),
                     cx + outer * std::cos (a), cy + outer * std::sin (a), 2.0f);
     }
 
-    const int selected = juce::jlimit (0, 3, static_cast<int> (std::round (getValue())));
     const float pointerAngle = juce::degreesToRadians (135.0f + 90.0f * static_cast<float> (selected));
     g.setColour (juce::Colour (0xffffb95b));
     g.drawLine (cx, cy, cx + radius * 0.58f * std::cos (pointerAngle),
@@ -157,7 +156,6 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     : AudioProcessorEditor (&processor), audioProcessor (processor)
 {
     setResizable (false, false);
-    setSize (designWidth, designHeight);
     addAndMakeVisible (scaledContent);
     scaledContent.paintContent = [this] (juce::Graphics& g) { paintDesign (g); };
 
@@ -168,12 +166,10 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     scaleSelector.addItem ("50%", 1);
     scaleSelector.addItem ("100%", 2);
     scaleSelector.addItem ("200%", 3);
-    scaleSelector.setSelectedId (2, juce::dontSendNotification);
     scaleSelector.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff30363b));
     scaleSelector.setColour (juce::ComboBox::textColourId, juce::Colour (0xffffc775));
     scaleSelector.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xffa8b0b3));
     scaleSelector.setJustificationType (juce::Justification::centred);
-    scaleSelector.onChange = [this] { applyScaleMode (scaleSelector.getSelectedId()); };
     scaledContent.addAndMakeVisible (scaleLabel);
     scaledContent.addAndMakeVisible (scaleSelector);
 
@@ -221,19 +217,69 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     scaledContent.addAndMakeVisible (ringFineKnob);
     scaledContent.addAndMakeVisible (ringMixKnob);
     scaledContent.addAndMakeVisible (ringModSwitch);
+
+    // ComboBoxListener is used instead of ComboBoxAttachment so the scale action
+    // and APVTS automation/state updates have a single, explicit change path.
+    const auto storedChoice = audioProcessor.apvts.getRawParameterValue ("uiScale")->load();
+    const int selectedItemId = juce::jlimit (1, 3, static_cast<int> (std::lround (storedChoice)) + 1);
+    scaleSelector.setSelectedId (selectedItemId, juce::dontSendNotification);
+    scaleSelector.addListener (this);
+    audioProcessor.apvts.addParameterListener ("uiScale", this);
+    pendingScaleChoice.store (selectedItemId - 1);
+
+    applyScaleMode (selectedItemId);
+}
+
+WaveringAudioProcessorEditor::~WaveringAudioProcessorEditor()
+{
+    audioProcessor.apvts.removeParameterListener ("uiScale", this);
+    scaleSelector.removeListener (this);
+    cancelPendingUpdate();
+}
+
+void WaveringAudioProcessorEditor::comboBoxChanged (juce::ComboBox* comboBox)
+{
+    if (comboBox != &scaleSelector)
+        return;
+
+    const int itemId = juce::jlimit (1, 3, scaleSelector.getSelectedId());
+    if (auto* parameter = audioProcessor.apvts.getParameter ("uiScale"))
+    {
+        const float choice = static_cast<float> (itemId - 1);
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (choice));
+        parameter->endChangeGesture();
+    }
+
+    applyScaleMode (itemId);
+}
+
+void WaveringAudioProcessorEditor::parameterChanged (const juce::String& parameterID, float newValue)
+{
+    if (parameterID == "uiScale")
+    {
+        pendingScaleChoice.store (juce::jlimit (0, 2, static_cast<int> (std::lround (newValue))));
+        triggerAsyncUpdate();
+    }
+}
+
+void WaveringAudioProcessorEditor::handleAsyncUpdate()
+{
+    const int itemId = pendingScaleChoice.load() + 1;
+    if (scaleSelector.getSelectedId() != itemId)
+        scaleSelector.setSelectedId (itemId, juce::dontSendNotification);
+    applyScaleMode (itemId);
 }
 
 void WaveringAudioProcessorEditor::applyScaleMode (int selectedItemId)
 {
-    const int id = selectedItemId >= 1 && selectedItemId <= 3 ? selectedItemId : 2;
-    userScale = id == 1 ? 0.5f : (id == 3 ? 2.0f : 1.0f);
+    const int itemId = juce::jlimit (1, 3, selectedItemId);
+    const float scale = itemId == 1 ? 0.5f : (itemId == 3 ? 2.0f : 1.0f);
 
-    // Scale one content root, while the editor peer is resized to the transformed
-    // root's dimensions. This preserves logical layout/hit regions and avoids
-    // applying a transform to both the editor and its children.
-    scaledContent.setTransform (juce::AffineTransform::scale (userScale));
-    setSize (juce::roundToInt (designWidth * userScale), juce::roundToInt (designHeight * userScale));
-    resized();
+    // Scale a single child root. JUCE transforms child painting and hit testing,
+    // while the editor peer is sized to the resulting transformed design bounds.
+    scaledContent.setTransform (juce::AffineTransform::scale (scale));
+    setSize (juce::roundToInt (designWidth * scale), juce::roundToInt (designHeight * scale));
 }
 
 void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
@@ -290,6 +336,8 @@ void WaveringAudioProcessorEditor::paintDesign (juce::Graphics& g)
 
 void WaveringAudioProcessorEditor::resized()
 {
+    // Keep layout in design coordinates; the content root transform is the one
+    // and only user-selected scale operation.
     scaledContent.setBounds (0, 0, designWidth, designHeight);
     constexpr int knobWidth = 100;
     constexpr int knobHeight = 142;
@@ -325,6 +373,8 @@ void WaveringAudioProcessorEditor::resized()
     ringMixKnob.setBounds (x, 583, ringKnobWidth, knobHeight);
     ringModSwitch.setBounds (designWidth / 2 - 88, 745, 176, 44);
 
-    scaleLabel.setBounds (570, 755, 62, 24);
-    scaleSelector.setBounds (636, 753, 78, 28);
+    // Put the global UI option at the lower-right of the footer, clear of the
+    // Ring Mod switch and the centered effect-chain caption.
+    scaleLabel.setBounds (538, 770, 74, 22);
+    scaleSelector.setBounds (615, 768, 94, 26);
 }

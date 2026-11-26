@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <array>
+#include <atomic>
 #include <functional>
 #include "PluginProcessor.h"
 
@@ -46,7 +48,10 @@ public:
                       bool shouldDrawButtonAsDown) override;
 };
 
-class WaveringAudioProcessorEditor : public juce::AudioProcessorEditor
+class WaveringAudioProcessorEditor : public juce::AudioProcessorEditor,
+                                     private juce::ComboBox::Listener,
+                                     private juce::AudioProcessorValueTreeState::Listener,
+                                     private juce::AsyncUpdater
 {
 private:
     class ScaledContent : public juce::Component
@@ -62,7 +67,7 @@ private:
 
 public:
     explicit WaveringAudioProcessorEditor (WaveringAudioProcessor&);
-    ~WaveringAudioProcessorEditor() override = default;
+    ~WaveringAudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -72,12 +77,15 @@ private:
     static constexpr int designHeight = 820;
     void paintDesign (juce::Graphics&);
     void applyScaleMode (int selectedItemId);
+    void comboBoxChanged (juce::ComboBox*) override;
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+    void handleAsyncUpdate() override;
 
     WaveringAudioProcessor& audioProcessor;
     ScaledContent scaledContent;
     juce::Label scaleLabel;
     juce::ComboBox scaleSelector;
-    float userScale = 1.0f;
+    std::atomic<int> pendingScaleChoice { 1 };
 
     MetalKnob driveKnob { "DRIVE" }, toneKnob { "TONE" }, biasKnob { "BIAS" },
               bodyKnob { "BODY" }, mixKnob { "MIX" };
