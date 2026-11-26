@@ -118,7 +118,7 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
 {
     setResizable (false, false);
     addAndMakeVisible (viewport);
-    viewport.setViewedComponent (&viewportContent, false); // viewportContent is an editor-owned member
+    viewport.setViewedComponent (&viewportContent, false);
     viewport.setScrollBarsShown (true, false);
     viewport.setScrollBarThickness (14);
     viewport.setScrollOnDragEnabled (false);
@@ -126,7 +126,7 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     scaledContent.paintContent = [this] (juce::Graphics& g) { paintDesign (g); };
 
     scaleLabel.setText ("UI SCALE", juce::dontSendNotification);
-    scaleLabel.setJustificationType (juce::Label::centredRight);
+    scaleLabel.setJustificationType (juce::Justification::centredRight);
     scaleLabel.setColour (juce::Label::textColourId, juce::Colour (0xfff0e5d2));
     scaleLabel.setFont (juce::Font (9.0f, juce::Font::bold));
     scaleSelector.addItem ("50%", 1); scaleSelector.addItem ("60%", 2); scaleSelector.addItem ("70%", 3);
