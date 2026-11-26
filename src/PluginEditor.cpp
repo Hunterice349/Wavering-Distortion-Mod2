@@ -92,11 +92,46 @@ void DistortionSwitch::paintButton (juce::Graphics& g, bool highlighted, bool do
                 juce::Justification::centred);
 }
 
+WaveguideSwitch::WaveguideSwitch() : juce::Button ("Waveguide on/off")
+{
+    setClickingTogglesState (true);
+}
+
+void WaveguideSwitch::paintButton (juce::Graphics& g, bool highlighted, bool down)
+{
+    const auto bounds = getLocalBounds().toFloat();
+    const auto track = bounds.withHeight (juce::jmin (25.0f, bounds.getHeight()));
+    const bool enabled = getToggleState();
+    g.setColour (juce::Colours::black.withAlpha (0.55f));
+    g.fillRoundedRectangle (track.translated (1.0f, 2.0f), 7.0f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd5d9dc), track.getX(), track.getY(),
+                                              juce::Colour (0xff41484d), track.getX(), track.getBottom(), false));
+    g.fillRoundedRectangle (track, 7.0f);
+
+    const float x = enabled ? track.getRight() - 35.0f : track.getX() + 5.0f;
+    juce::Rectangle<float> toggle (x, track.getY() + 3.0f, 30.0f, track.getHeight() - 6.0f);
+    if (down || highlighted)
+        toggle = toggle.reduced (0.5f);
+    g.setColour (juce::Colours::black.withAlpha (0.5f));
+    g.fillRoundedRectangle (toggle.translated (0.0f, 2.0f), 5.0f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfff6f7f5), toggle.getX(), toggle.getY(),
+                                              juce::Colour (0xff737b80), toggle.getRight(), toggle.getBottom(), false));
+    g.fillRoundedRectangle (toggle, 5.0f);
+    g.setColour (enabled ? juce::Colour (0xff64ff9c) : juce::Colour (0xff572a26));
+    g.fillEllipse (track.getCentreX() - 4.0f, track.getCentreY() - 4.0f, 8.0f, 8.0f);
+    g.setFont (juce::Font (10.0f, juce::Font::bold));
+    g.setColour (juce::Colour (0xfff4ead8));
+    g.drawText (enabled ? "WAVEGUIDE  ON" : "WAVEGUIDE  OFF",
+                juce::Rectangle<float> (bounds.getX(), track.getBottom() + 2.0f,
+                                        bounds.getWidth(), bounds.getHeight() - track.getHeight() - 2.0f),
+                juce::Justification::centred);
+}
+
 WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcessor& processor)
     : AudioProcessorEditor (&processor), audioProcessor (processor)
 {
     setResizable (false, false);
-    setSize (760, 410);
+    setSize (760, 690);
 
     const auto attachSlider = [this] (const juce::String& parameter, juce::Slider& slider)
     {
@@ -111,12 +146,28 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     switchAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
                        (audioProcessor.apvts, "distortionEnabled", distortionSwitch);
 
+    attachSlider ("waveRate", rateKnob);
+    attachSlider ("waveResonance", resonanceKnob);
+    attachSlider ("waveFeedback", feedbackKnob);
+    attachSlider ("waveDamping", dampingKnob);
+    attachSlider ("waveCharacter", characterKnob);
+    attachSlider ("waveMix", waveMixKnob);
+    waveguideSwitchAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
+                                (audioProcessor.apvts, "waveguideEnabled", waveguideSwitch);
+
     addAndMakeVisible (driveKnob);
     addAndMakeVisible (toneKnob);
     addAndMakeVisible (biasKnob);
     addAndMakeVisible (bodyKnob);
     addAndMakeVisible (mixKnob);
     addAndMakeVisible (distortionSwitch);
+    addAndMakeVisible (rateKnob);
+    addAndMakeVisible (resonanceKnob);
+    addAndMakeVisible (feedbackKnob);
+    addAndMakeVisible (dampingKnob);
+    addAndMakeVisible (characterKnob);
+    addAndMakeVisible (waveMixKnob);
+    addAndMakeVisible (waveguideSwitch);
 }
 
 void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
@@ -145,33 +196,47 @@ void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
     g.drawText ("ANALOG-INSPIRED SATURATION  •  DISTORTION MODULE", 35, 70, getWidth() - 70, 18,
                 juce::Justification::centred);
 
-    juce::Rectangle<float> controlPanel (38.0f, 112.0f, static_cast<float> (getWidth() - 76), 185.0f);
+    juce::Rectangle<float> distortionPanel (38.0f, 112.0f, static_cast<float> (getWidth() - 76), 185.0f);
+    juce::Rectangle<float> waveguidePanel (38.0f, 388.0f, static_cast<float> (getWidth() - 76), 185.0f);
     g.setColour (juce::Colours::black.withAlpha (0.38f));
-    g.fillRoundedRectangle (controlPanel, 8.0f);
+    g.fillRoundedRectangle (distortionPanel, 8.0f);
+    g.fillRoundedRectangle (waveguidePanel, 8.0f);
     g.setColour (juce::Colour (0xffa8b0b3).withAlpha (0.22f));
-    g.drawRoundedRectangle (controlPanel, 8.0f, 1.0f);
+    g.drawRoundedRectangle (distortionPanel, 8.0f, 1.0f);
+    g.drawRoundedRectangle (waveguidePanel, 8.0f, 1.0f);
 
+    g.setFont (juce::Font (9.0f, juce::Font::bold));
+    g.setColour (juce::Colour (0xffffbd68));
+    g.drawText ("DISTORTION", 45, 98, getWidth() - 90, 12, juce::Justification::centred);
+    g.drawText ("WAVEGUIDE RESONATOR", 45, 374, getWidth() - 90, 12, juce::Justification::centred);
     g.setFont (juce::Font (9.0f));
     g.setColour (juce::Colour (0xffaeb6b7));
-    g.drawText ("EXPANDABLE EFFECT SECTION", 40, 350, getWidth() - 80, 14,
+    g.drawText ("MODULAR EFFECT CHAIN  •  DISTORTION → WAVEGUIDE", 40, 660, getWidth() - 80, 14,
                 juce::Justification::centred);
-    g.setColour (juce::Colour (0xff777f82));
-    g.drawText ("WAVEGUIDE RESONATOR  •  RING MODULATOR  —  NOT INCLUDED IN THIS PHASE",
-                35, 367, getWidth() - 70, 14, juce::Justification::centred);
 }
 
 void WaveringAudioProcessorEditor::resized()
 {
-    constexpr int knobWidth = 112;
+    constexpr int knobWidth = 100;
     constexpr int knobHeight = 142;
-    constexpr int gap = 18;
-    const int total = knobWidth * 5 + gap * 4;
-    int x = (getWidth() - total) / 2;
-    const int y = 132;
-    driveKnob.setBounds (x, y, knobWidth, knobHeight); x += knobWidth + gap;
-    toneKnob.setBounds (x, y, knobWidth, knobHeight); x += knobWidth + gap;
-    biasKnob.setBounds (x, y, knobWidth, knobHeight); x += knobWidth + gap;
-    bodyKnob.setBounds (x, y, knobWidth, knobHeight); x += knobWidth + gap;
-    mixKnob.setBounds (x, y, knobWidth, knobHeight);
+    constexpr int gap = 16;
+    constexpr int totalWidth = knobWidth * 6 + gap * 5;
+    const int startX = (getWidth() - totalWidth) / 2;
+
+    int x = (getWidth() - (112 * 5 + 18 * 4)) / 2;
+    driveKnob.setBounds (x, 132, 112, 142); x += 130;
+    toneKnob.setBounds (x, 132, 112, 142); x += 130;
+    biasKnob.setBounds (x, 132, 112, 142); x += 130;
+    bodyKnob.setBounds (x, 132, 112, 142); x += 130;
+    mixKnob.setBounds (x, 132, 112, 142);
     distortionSwitch.setBounds (getWidth() / 2 - 88, 303, 176, 44);
+
+    x = startX;
+    rateKnob.setBounds (x, 408, knobWidth, knobHeight); x += knobWidth + gap;
+    resonanceKnob.setBounds (x, 408, knobWidth, knobHeight); x += knobWidth + gap;
+    feedbackKnob.setBounds (x, 408, knobWidth, knobHeight); x += knobWidth + gap;
+    dampingKnob.setBounds (x, 408, knobWidth, knobHeight); x += knobWidth + gap;
+    characterKnob.setBounds (x, 408, knobWidth, knobHeight); x += knobWidth + gap;
+    waveMixKnob.setBounds (x, 408, knobWidth, knobHeight);
+    waveguideSwitch.setBounds (getWidth() / 2 - 88, 579, 176, 44);
 }

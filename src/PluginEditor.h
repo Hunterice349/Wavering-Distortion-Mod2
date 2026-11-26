@@ -22,6 +22,14 @@ public:
                       bool shouldDrawButtonAsDown) override;
 };
 
+class WaveguideSwitch : public juce::Button
+{
+public:
+    WaveguideSwitch();
+    void paintButton (juce::Graphics&, bool shouldDrawButtonAsHighlighted,
+                      bool shouldDrawButtonAsDown) override;
+};
+
 class WaveringAudioProcessorEditor : public juce::AudioProcessorEditor
 {
 public:
@@ -36,8 +44,12 @@ private:
     MetalKnob driveKnob { "DRIVE" }, toneKnob { "TONE" }, biasKnob { "BIAS" },
               bodyKnob { "BODY" }, mixKnob { "MIX" };
     DistortionSwitch distortionSwitch;
+    MetalKnob rateKnob { "RATE" }, resonanceKnob { "RESONANCE" }, feedbackKnob { "FEEDBACK" },
+              dampingKnob { "DAMPING" }, characterKnob { "CHARACTER" }, waveMixKnob { "MIX" };
+    WaveguideSwitch waveguideSwitch;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> switchAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> waveguideSwitchAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringAudioProcessorEditor)
 };

@@ -20,6 +20,8 @@ juce_add_plugin(WaveringDistortionMod
 target_sources(WaveringDistortionMod PRIVATE
     src/DistortionDSP.cpp
     src/DistortionDSP.h
+    src/WaveguideDSP.cpp
+    src/WaveguideDSP.h
     src/PluginProcessor.cpp
     src/PluginProcessor.h
     src/PluginEditor.cpp
