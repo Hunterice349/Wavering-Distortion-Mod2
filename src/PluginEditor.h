@@ -48,6 +48,14 @@ public:
                       bool shouldDrawButtonAsDown) override;
 };
 
+class SpectralDelaySwitch : public juce::Button
+{
+public:
+    SpectralDelaySwitch();
+    void paintButton (juce::Graphics&, bool shouldDrawButtonAsHighlighted,
+                      bool shouldDrawButtonAsDown) override;
+};
+
 class WaveringAudioProcessorEditor : public juce::AudioProcessorEditor,
                                      private juce::ComboBox::Listener,
                                      private juce::AudioProcessorValueTreeState::Listener,
@@ -74,7 +82,7 @@ public:
 
 private:
     static constexpr int designWidth = 760;
-    static constexpr int designHeight = 820;
+    static constexpr int designHeight = 1040;
     void paintDesign (juce::Graphics&);
     void applyScaleMode (int selectedItemId);
     void comboBoxChanged (juce::ComboBox*) override;
@@ -97,11 +105,16 @@ private:
               ringMixKnob { "MIX" };
     WaveformKnob ringWaveformSelector;
     RingModSwitch ringModSwitch;
+    MetalKnob spectralTimeKnob { "TIME" }, spectralLowKnob { "LOW" }, spectralMidKnob { "MID" },
+              spectralHighKnob { "HIGH" }, spectralFeedbackKnob { "FEEDBACK" },
+              spectralWidthKnob { "WIDTH" }, spectralMixKnob { "MIX" };
+    SpectralDelaySwitch spectralDelaySwitch;
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> switchAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> waveguideSwitchAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ringModSwitchAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> spectralDelaySwitchAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> ringWaveformAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringAudioProcessorEditor)

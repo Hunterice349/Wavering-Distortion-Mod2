@@ -116,6 +116,7 @@ void WaveformKnob::paint (juce::Graphics& g)
 DistortionSwitch::DistortionSwitch() : juce::Button ("Distortion on/off") { setClickingTogglesState (true); }
 WaveguideSwitch::WaveguideSwitch() : juce::Button ("Waveguide on/off") { setClickingTogglesState (true); }
 RingModSwitch::RingModSwitch() : juce::Button ("Ring Modulator on/off") { setClickingTogglesState (true); }
+SpectralDelaySwitch::SpectralDelaySwitch() : juce::Button ("Spectral Delay on/off") { setClickingTogglesState (true); }
 
 namespace
 {
@@ -159,6 +160,10 @@ void WaveguideSwitch::paintButton (juce::Graphics& g, bool highlighted, bool dow
 void RingModSwitch::paintButton (juce::Graphics& g, bool highlighted, bool down)
 {
     paintSwitch (g, *this, getToggleState(), getToggleState() ? "RING MOD  ON" : "RING MOD  OFF", highlighted, down);
+}
+void SpectralDelaySwitch::paintButton (juce::Graphics& g, bool highlighted, bool down)
+{
+    paintSwitch (g, *this, getToggleState(), getToggleState() ? "SPECTRAL DELAY  ON" : "SPECTRAL DELAY  OFF", highlighted, down);
 }
 
 WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcessor& processor)
@@ -217,6 +222,16 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     ringModSwitchAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
                               (audioProcessor.apvts, "ringEnabled", ringModSwitch);
 
+    attachSlider ("spectralDelayTime", spectralTimeKnob);
+    attachSlider ("spectralDelayLow", spectralLowKnob);
+    attachSlider ("spectralDelayMid", spectralMidKnob);
+    attachSlider ("spectralDelayHigh", spectralHighKnob);
+    attachSlider ("spectralDelayFeedback", spectralFeedbackKnob);
+    attachSlider ("spectralDelayWidth", spectralWidthKnob);
+    attachSlider ("spectralDelayMix", spectralMixKnob);
+    spectralDelaySwitchAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
+                                    (audioProcessor.apvts, "spectralDelayEnabled", spectralDelaySwitch);
+
     for (auto* control : std::array<juce::Component*, 5> { &driveKnob, &toneKnob, &biasKnob, &bodyKnob, &mixKnob })
         scaledContent.addAndMakeVisible (*control);
     scaledContent.addAndMakeVisible (distortionSwitch);
@@ -230,6 +245,11 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     scaledContent.addAndMakeVisible (ringFineKnob);
     scaledContent.addAndMakeVisible (ringMixKnob);
     scaledContent.addAndMakeVisible (ringModSwitch);
+    for (auto* control : std::array<juce::Component*, 7> { &spectralTimeKnob, &spectralLowKnob, &spectralMidKnob,
+                                                           &spectralHighKnob, &spectralFeedbackKnob, &spectralWidthKnob,
+                                                           &spectralMixKnob })
+        scaledContent.addAndMakeVisible (*control);
+    scaledContent.addAndMakeVisible (spectralDelaySwitch);
 
     // The APVTS value stores its stable choice index. Mapping keeps the old
     // indices (0=50%, 1=100%, 2=200%) intact while the UI lists scales in order.
@@ -326,23 +346,27 @@ void WaveringAudioProcessorEditor::paintDesign (juce::Graphics& g)
     const juce::Rectangle<float> distortionPanel (38.0f, 95.0f, designWidth - 76.0f, 165.0f);
     const juce::Rectangle<float> waveguidePanel (38.0f, 335.0f, designWidth - 76.0f, 165.0f);
     const juce::Rectangle<float> ringPanel (38.0f, 575.0f, designWidth - 76.0f, 165.0f);
+    const juce::Rectangle<float> spectralPanel (38.0f, 815.0f, designWidth - 76.0f, 190.0f);
     g.setColour (juce::Colours::black.withAlpha (0.38f));
     g.fillRoundedRectangle (distortionPanel, 8.0f);
     g.fillRoundedRectangle (waveguidePanel, 8.0f);
     g.fillRoundedRectangle (ringPanel, 8.0f);
+    g.fillRoundedRectangle (spectralPanel, 8.0f);
     g.setColour (juce::Colour (0xffa8b0b3).withAlpha (0.22f));
     g.drawRoundedRectangle (distortionPanel, 8.0f, 1.0f);
     g.drawRoundedRectangle (waveguidePanel, 8.0f, 1.0f);
     g.drawRoundedRectangle (ringPanel, 8.0f, 1.0f);
+    g.drawRoundedRectangle (spectralPanel, 8.0f, 1.0f);
 
     g.setFont (juce::Font (9.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xffffbd68));
     g.drawText ("DISTORTION", 45, 80, designWidth - 90, 12, juce::Justification::centred);
     g.drawText ("WAVEGUIDE RESONATOR", 45, 320, designWidth - 90, 12, juce::Justification::centred);
     g.drawText ("RING MODULATOR", 45, 560, designWidth - 90, 12, juce::Justification::centred);
+    g.drawText ("SPECTRAL DELAY", 45, 800, designWidth - 90, 12, juce::Justification::centred);
     g.setFont (juce::Font (9.0f));
     g.setColour (juce::Colour (0xffaeb6b7));
-    g.drawText ("MODULAR EFFECT CHAIN  •  DISTORTION → WAVEGUIDE → RING MOD", 40, 798,
+    g.drawText ("MODULAR EFFECT CHAIN  •  DISTORTION → WAVEGUIDE → RING MOD → SPECTRAL DELAY", 40, 1017,
                 designWidth - 80, 14, juce::Justification::centred);
 }
 
@@ -382,6 +406,19 @@ void WaveringAudioProcessorEditor::resized()
     ringFineKnob.setBounds (x, 583, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
     ringMixKnob.setBounds (x, 583, ringKnobWidth, knobHeight);
     ringModSwitch.setBounds (designWidth / 2 - 88, 745, 176, 44);
+
+    constexpr int spectralKnobWidth = 88;
+    constexpr int spectralGap = 8;
+    const int spectralStart = (designWidth - (spectralKnobWidth * 7 + spectralGap * 6)) / 2;
+    x = spectralStart;
+    spectralTimeKnob.setBounds (x, 823, spectralKnobWidth, 130); x += spectralKnobWidth + spectralGap;
+    spectralLowKnob.setBounds (x, 823, spectralKnobWidth, 130); x += spectralKnobWidth + spectralGap;
+    spectralMidKnob.setBounds (x, 823, spectralKnobWidth, 130); x += spectralKnobWidth + spectralGap;
+    spectralHighKnob.setBounds (x, 823, spectralKnobWidth, 130); x += spectralKnobWidth + spectralGap;
+    spectralFeedbackKnob.setBounds (x, 823, spectralKnobWidth, 130); x += spectralKnobWidth + spectralGap;
+    spectralWidthKnob.setBounds (x, 823, spectralKnobWidth, 130); x += spectralKnobWidth + spectralGap;
+    spectralMixKnob.setBounds (x, 823, spectralKnobWidth, 130);
+    spectralDelaySwitch.setBounds (designWidth / 2 - 100, 958, 200, 44);
 
     scaleLabel.setBounds (560, 20, 72, 22);
     scaleSelector.setBounds (636, 18, 94, 26);
