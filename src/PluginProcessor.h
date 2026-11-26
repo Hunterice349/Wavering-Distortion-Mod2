@@ -4,6 +4,7 @@
 #include "DistortionDSP.h"
 #include "WaveguideDSP.h"
 #include "RingModulatorDSP.h"
+#include "SpectralDelayDSP.h"
 
 class WaveringAudioProcessor : public juce::AudioProcessor
 {
@@ -41,11 +42,13 @@ private:
     DistortionDSP distortion;
     WaveguideDSP waveguide;
     RingModulatorDSP ringModulator;
+    SpectralDelayDSP spectralDelay;
     double currentSampleRate = 44100.0;
 
     DistortionDSP::Parameters readDistortionParameters() const noexcept;
     WaveguideDSP::Parameters readWaveguideParameters() const noexcept;
     RingModulatorDSP::Parameters readRingModulatorParameters() const noexcept;
+    SpectralDelayDSP::Parameters readSpectralDelayParameters() const noexcept;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringAudioProcessor)
 };

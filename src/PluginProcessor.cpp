@@ -71,10 +71,33 @@ juce::AudioProcessorValueTreeState::ParameterLayout WaveringAudioProcessor::crea
         juce::ParameterID { "ringEnabled", 1 }, "Ring Mod On", false));
 
     // Preserve the serialized legacy indices: 0=50%, 1=100%, 2=200%.
-    // New choices are appended so old FL Studio/APVTS state keeps its meaning.
     parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { "uiScale", 1 }, "UI Scale",
         juce::StringArray { "50%", "100%", "200%", "60%", "70%", "80%", "90%" }, 1));
+
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "spectralDelayTime", 1 }, "Spectral Delay Time", controlRange, 3.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "spectralDelayLow", 1 }, "Spectral Delay Low", controlRange, 5.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "spectralDelayMid", 1 }, "Spectral Delay Mid", controlRange, 5.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "spectralDelayHigh", 1 }, "Spectral Delay High", controlRange, 5.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "spectralDelayFeedback", 1 }, "Spectral Delay Feedback", controlRange, 3.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "spectralDelayWidth", 1 }, "Spectral Delay Width", controlRange, 5.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "spectralDelayMix", 1 }, "Spectral Delay Mix", controlRange, 0.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "spectralDelayEnabled", 1 }, "Spectral Delay On", false));
 
     return { parameters.begin(), parameters.end() };
 }
@@ -116,6 +139,20 @@ RingModulatorDSP::Parameters WaveringAudioProcessor::readRingModulatorParameters
     return parameters;
 }
 
+SpectralDelayDSP::Parameters WaveringAudioProcessor::readSpectralDelayParameters() const noexcept
+{
+    SpectralDelayDSP::Parameters parameters;
+    parameters.time = apvts.getRawParameterValue ("spectralDelayTime")->load();
+    parameters.low = apvts.getRawParameterValue ("spectralDelayLow")->load();
+    parameters.mid = apvts.getRawParameterValue ("spectralDelayMid")->load();
+    parameters.high = apvts.getRawParameterValue ("spectralDelayHigh")->load();
+    parameters.feedback = apvts.getRawParameterValue ("spectralDelayFeedback")->load();
+    parameters.width = apvts.getRawParameterValue ("spectralDelayWidth")->load();
+    parameters.mix = apvts.getRawParameterValue ("spectralDelayMix")->load();
+    parameters.enabled = apvts.getRawParameterValue ("spectralDelayEnabled")->load() > 0.5f;
+    return parameters;
+}
+
 bool WaveringAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     const auto& output = layouts.getMainOutputChannelSet();
@@ -130,6 +167,7 @@ void WaveringAudioProcessor::prepareToPlay (double sampleRate, int)
     distortion.prepare (currentSampleRate, readDistortionParameters());
     waveguide.prepare (currentSampleRate, readWaveguideParameters());
     ringModulator.prepare (currentSampleRate, readRingModulatorParameters());
+    spectralDelay.prepare (currentSampleRate, readSpectralDelayParameters());
 }
 
 void WaveringAudioProcessor::releaseResources()
@@ -137,6 +175,7 @@ void WaveringAudioProcessor::releaseResources()
     distortion.reset();
     waveguide.reset();
     ringModulator.reset();
+    spectralDelay.reset();
 }
 
 void WaveringAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -155,6 +194,7 @@ void WaveringAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     distortion.setParameters (readDistortionParameters());
     waveguide.setParameters (readWaveguideParameters());
     ringModulator.setParameters (readRingModulatorParameters());
+    spectralDelay.setParameters (readSpectralDelayParameters());
     const bool stereo = outputChannels > 1 && inputChannels > 1;
     float* left = buffer.getWritePointer (0);
     float* right = stereo ? buffer.getWritePointer (1) : nullptr;
@@ -169,8 +209,11 @@ void WaveringAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         float resonatedLeft = 0.0f, resonatedRight = 0.0f;
         waveguide.processFrame (distortedLeft, distortedRight, stereo, resonatedLeft, resonatedRight);
 
+        float ringLeft = 0.0f, ringRight = 0.0f;
+        ringModulator.processFrame (resonatedLeft, resonatedRight, stereo, ringLeft, ringRight);
+
         float outputLeft = 0.0f, outputRight = 0.0f;
-        ringModulator.processFrame (resonatedLeft, resonatedRight, stereo, outputLeft, outputRight);
+        spectralDelay.processFrame (ringLeft, ringRight, stereo, outputLeft, outputRight);
         left[sample] = outputLeft;
         if (stereo)
             right[sample] = outputRight;
