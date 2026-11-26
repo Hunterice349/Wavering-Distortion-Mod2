@@ -47,7 +47,6 @@ void MetalKnob::paint (juce::Graphics& g)
                     cx + (d * 0.5f - 6.0f) * std::cos (a), cy + (d * 0.5f - 6.0f) * std::sin (a), 1.0f);
     }
 
-    // ИСПРАВЛЕНО: распаковка Rectangle<float> в x, y, width, height для addArc
     g.setColour (juce::Colour (0xff35e0ff).withAlpha (0.9f));
     juce::Path arcPath;
     auto arcRect = body.expanded (7.0f);
@@ -109,14 +108,23 @@ void VuMeter::paint (juce::Graphics& g)
     g.fillRoundedRectangle (b, 6.0f);
 
     const auto face = b.reduced (10.0f, 10.0f);
-    g.setGradientFill (juce::ColourGradient::radial (juce::Colour (0xfffefcf4), face.getCentre(), face.getWidth() * 0.7f, juce::Colour (0xffcfc8ba)));
+
+    // JUCE 8.0.4: радиальный градиент через конструктор ColourGradient.
+    g.setGradientFill (juce::ColourGradient (
+        juce::Colour (0xfffefcf4),
+        face.getCentreX(),
+        face.getCentreY(),
+        juce::Colour (0xffcfc8ba),
+        face.getCentreX() + face.getWidth() * 0.7f,
+        face.getCentreY(),
+        true
+    ));
     g.fillRoundedRectangle (face, 4.0f);
 
     const float cx = face.getCentreX();
     const float cy = face.getBottom() - 8.0f;
     const float R  = face.getHeight() - 34.0f;
 
-    // ИСПРАВЛЕНО 1: распаковка Rectangle<float> для основной шкалы
     g.setColour (juce::Colours::black);
     juce::Path scalePath;
     juce::Rectangle<float> scaleRect (cx - R, cy - R, R * 2.0f, R * 2.0f);
@@ -124,7 +132,6 @@ void VuMeter::paint (juce::Graphics& g)
                       juce::degreesToRadians (195.0f), juce::degreesToRadians (150.0f), false);
     g.strokePath (scalePath, juce::PathStrokeType (1.0f));
 
-    // ИСПРАВЛЕНО 2: распаковка Rectangle<float> для красной зоны
     g.setColour (juce::Colour (0xffd21f1a));
     const float redR = R - 9.0f;
     juce::Path redPath;
@@ -138,7 +145,9 @@ void VuMeter::paint (juce::Graphics& g)
     {
         const float a = dbToAngle (db);
         bool major = false;
-        for (auto m : majors) if (std::abs (m - db) < 0.01f) major = true;
+        for (auto m : majors)
+            if (std::abs (m - db) < 0.01f)
+                major = true;
 
         const float len = major ? 13.0f : 7.0f;
         const float r1 = R, r2 = R - len;
@@ -271,7 +280,17 @@ void RingScope::paint (juce::Graphics& g)
 void Led::paint (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat().reduced (1.0f);
-    g.setGradientFill (juce::ColourGradient::radial (colour.withAlpha (0.5f * glow), b.getCentre(), b.getWidth() * 1.4f, juce::Colours::transparentBlack));
+
+    // JUCE 8.0.4: радиальный градиент через конструктор ColourGradient.
+    g.setGradientFill (juce::ColourGradient (
+        colour.withAlpha (0.5f * glow),
+        b.getCentreX(),
+        b.getCentreY(),
+        juce::Colours::transparentBlack,
+        b.getCentreX() + b.getWidth() * 1.4f,
+        b.getCentreY(),
+        true
+    ));
     g.fillEllipse (b.expanded (b.getWidth()));
 
     g.setGradientFill (juce::ColourGradient (colour.brighter (0.6f), b.getX(), b.getY(),
@@ -294,6 +313,7 @@ BypassSwitch::BypassSwitch (WaveringAudioProcessor& p) : proc (p) {}
 void BypassSwitch::mouseDown (const juce::MouseEvent&)
 {
     auto* param = proc.apvts.getParameter ("bypass");
+
     if (param != nullptr)
     {
         param->setValue (param->getValue() > 0.5f ? 0.0f : 1.0f);
@@ -304,7 +324,10 @@ void BypassSwitch::mouseDown (const juce::MouseEvent&)
 void BypassSwitch::paint (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat();
-    const bool bypassed = proc.apvts.getRawParameterValue ("bypass")->load() > 0.5f;
+
+    // Защита от nullptr: параметр может отсутствовать или ещё не быть доступен.
+    auto* bypassParameter = proc.apvts.getRawParameterValue ("bypass");
+    const bool bypassed = bypassParameter != nullptr && bypassParameter->load() > 0.5f;
 
     g.setColour (juce::Colours::black.withAlpha (0.4f));
     g.fillRoundedRectangle (b.translated (1.5f, 2.5f), 8.0f);
@@ -499,3 +522,4 @@ void WaveringAudioProcessorEditor::timerCallback()
     clipLed.setState (lvl > -0.5f ? juce::Colour (0xffff3b30) : juce::Colour (0xff3a1210),
                       lvl > -0.5f ? 1.0f : 0.15f);
 }
+
