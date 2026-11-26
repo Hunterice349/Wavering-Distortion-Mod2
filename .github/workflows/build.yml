@@ -1,4 +1,3 @@
-
 name: Build Plugin
 
 on:
@@ -49,6 +48,25 @@ jobs:
 
       - name: Build
         run: cmake --build build --config Release
+
+      # Validate the compiled VST3 in a test host.
+      - name: Validate Windows VST3 with pluginval
+        uses: Tracktion/pluginval/validate@v2
+        with:
+          plugins: |
+            build/WaveringDistortionMod_artefacts/Release/VST3/*.vst3
+          strictness-level: 5
+          args: --skip-gui-tests --timeout-ms 120000
+          pluginval-version: v2.0.0-beta3
+          report-dir: pluginval-reports
+
+      - name: Upload pluginval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pluginval-report
+          path: pluginval-reports/
+          if-no-files-found: warn
 
       - name: Package Windows VST3
         shell: pwsh
@@ -297,3 +315,6 @@ jobs:
           name: WaveringDistortionMod-Windows
           path: build/WaveringDistortionMod_artefacts/Release
           if-no-files-found: error
+
+
+
