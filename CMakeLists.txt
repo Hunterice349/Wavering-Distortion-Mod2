@@ -36,3 +36,13 @@ target_link_libraries(WaveringDistortionMod PRIVATE
     juce::juce_audio_utils
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags)
+
+# Standalone DSP test harness uses DistortionDSP and the C++ standard library.
+enable_testing()
+add_executable(DistortionDSPTests
+    tests/DSPTests.cpp
+    src/DistortionDSP.cpp)
+target_include_directories(DistortionDSPTests PRIVATE src)
+target_compile_features(DistortionDSPTests PRIVATE cxx_std_17)
+add_test(NAME DistortionDSPTests
+         COMMAND DistortionDSPTests "${CMAKE_BINARY_DIR}/distortion_metrics.csv")
