@@ -56,6 +56,57 @@ void MetalKnob::paint (juce::Graphics& g)
                 juce::Justification::centred);
 }
 
+WaveformKnob::WaveformKnob()
+{
+    setSliderStyle (juce::Slider::RotaryVerticalDrag);
+    setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    setRange (0.0, 3.0, 1.0);
+    setDoubleClickReturnValue (true, 0.0);
+}
+
+void WaveformKnob::paint (juce::Graphics& g)
+{
+    static const char* const names[] { "SINE", "TRIANGLE", "SQUARE", "SAW" };
+    const auto bounds = getLocalBounds().toFloat();
+    const float diameter = juce::jmax (12.0f, juce::jmin (bounds.getWidth(), bounds.getHeight() - 38.0f) - 12.0f);
+    const float cx = bounds.getCentreX();
+    const float cy = bounds.getY() + diameter * 0.5f + 6.0f;
+    const float radius = diameter * 0.5f;
+    const auto face = juce::Rectangle<float> (cx - radius, cy - radius, diameter, diameter);
+
+    g.setColour (juce::Colours::black.withAlpha (0.48f));
+    g.fillEllipse (face.translated (2.0f, 4.0f).expanded (2.0f));
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffe6edf1), face.getX(), face.getY(),
+                                              juce::Colour (0xff30363b), face.getRight(), face.getBottom(), false));
+    g.fillEllipse (face.expanded (3.0f));
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffbbc5ca), cx, face.getY(),
+                                              juce::Colour (0xff59636a), cx, face.getBottom(), false));
+    g.fillEllipse (face);
+
+    for (int i = 0; i < 4; ++i)
+    {
+        const float a = juce::degreesToRadians (135.0f + 90.0f * static_cast<float> (i));
+        const float outer = radius + 8.0f;
+        const float inner = outer - (i == static_cast<int> (std::round (getValue())) ? 7.0f : 4.0f);
+        g.setColour (i == static_cast<int> (std::round (getValue())) ? juce::Colour (0xffffbd68)
+                                                                     : juce::Colours::black.withAlpha (0.75f));
+        g.drawLine (cx + inner * std::cos (a), cy + inner * std::sin (a),
+                    cx + outer * std::cos (a), cy + outer * std::sin (a), 2.0f);
+    }
+
+    const int selected = juce::jlimit (0, 3, static_cast<int> (std::round (getValue())));
+    const float pointerAngle = juce::degreesToRadians (135.0f + 90.0f * static_cast<float> (selected));
+    g.setColour (juce::Colour (0xffffb95b));
+    g.drawLine (cx, cy, cx + radius * 0.58f * std::cos (pointerAngle),
+                cy + radius * 0.58f * std::sin (pointerAngle), 3.0f);
+    g.setColour (juce::Colour (0xfff0e5d2));
+    g.setFont (juce::Font (10.0f, juce::Font::bold));
+    g.drawText ("WAVEFORM", juce::Rectangle<int> (0, getHeight() - 32, getWidth(), 13), juce::Justification::centred);
+    g.setColour (juce::Colour (0xffffc775));
+    g.setFont (juce::Font (10.0f, juce::Font::bold));
+    g.drawText (names[selected], juce::Rectangle<int> (0, getHeight() - 17, getWidth(), 13), juce::Justification::centred);
+}
+
 DistortionSwitch::DistortionSwitch() : juce::Button ("Distortion on/off")
 {
     setClickingTogglesState (true);
@@ -71,12 +122,10 @@ void DistortionSwitch::paintButton (juce::Graphics& g, bool highlighted, bool do
     g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd5d9dc), track.getX(), track.getY(),
                                               juce::Colour (0xff41484d), track.getX(), track.getBottom(), false));
     g.fillRoundedRectangle (track, 7.0f);
-
     const float travel = track.getWidth() - 35.0f;
     const float x = enabled ? track.getX() + travel : track.getX() + 5.0f;
     juce::Rectangle<float> toggle (x, track.getY() + 3.0f, 30.0f, track.getHeight() - 6.0f);
-    if (down || highlighted)
-        toggle = toggle.reduced (0.5f);
+    if (down || highlighted) toggle = toggle.reduced (0.5f);
     g.setColour (juce::Colours::black.withAlpha (0.5f));
     g.fillRoundedRectangle (toggle.translated (0.0f, 2.0f), 5.0f);
     g.setGradientFill (juce::ColourGradient (juce::Colour (0xfff6f7f5), toggle.getX(), toggle.getY(),
@@ -107,11 +156,9 @@ void WaveguideSwitch::paintButton (juce::Graphics& g, bool highlighted, bool dow
     g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd5d9dc), track.getX(), track.getY(),
                                               juce::Colour (0xff41484d), track.getX(), track.getBottom(), false));
     g.fillRoundedRectangle (track, 7.0f);
-
     const float x = enabled ? track.getRight() - 35.0f : track.getX() + 5.0f;
     juce::Rectangle<float> toggle (x, track.getY() + 3.0f, 30.0f, track.getHeight() - 6.0f);
-    if (down || highlighted)
-        toggle = toggle.reduced (0.5f);
+    if (down || highlighted) toggle = toggle.reduced (0.5f);
     g.setColour (juce::Colours::black.withAlpha (0.5f));
     g.fillRoundedRectangle (toggle.translated (0.0f, 2.0f), 5.0f);
     g.setGradientFill (juce::ColourGradient (juce::Colour (0xfff6f7f5), toggle.getX(), toggle.getY(),
@@ -144,8 +191,7 @@ void RingModSwitch::paintButton (juce::Graphics& g, bool highlighted, bool down)
     g.fillRoundedRectangle (track, 7.0f);
     const float x = enabled ? track.getRight() - 35.0f : track.getX() + 5.0f;
     juce::Rectangle<float> toggle (x, track.getY() + 3.0f, 30.0f, track.getHeight() - 6.0f);
-    if (down || highlighted)
-        toggle = toggle.reduced (0.5f);
+    if (down || highlighted) toggle = toggle.reduced (0.5f);
     g.setColour (juce::Colours::black.withAlpha (0.5f));
     g.fillRoundedRectangle (toggle.translated (0.0f, 2.0f), 5.0f);
     g.setGradientFill (juce::ColourGradient (juce::Colour (0xfff6f7f5), toggle.getX(), toggle.getY(),
@@ -165,7 +211,7 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     : AudioProcessorEditor (&processor), audioProcessor (processor)
 {
     setResizable (false, false);
-    setSize (760, 920);
+    setSize (760, 820);
 
     const auto attachSlider = [this] (const juce::String& parameter, juce::Slider& slider)
     {
@@ -193,16 +239,7 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     attachSlider ("ringDepth", ringDepthKnob);
     attachSlider ("ringFine", ringFineKnob);
     attachSlider ("ringMix", ringMixKnob);
-    ringWaveformSelector.addItemList ({ "Sine", "Triangle", "Square", "Saw" }, 1);
-    ringWaveformSelector.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff30363b));
-    ringWaveformSelector.setColour (juce::ComboBox::textColourId, juce::Colour (0xffffc775));
-    ringWaveformSelector.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xffa8b0b3));
-    ringWaveformSelector.setJustificationType (juce::Justification::centred);
-    ringWaveformLabel.setText ("WAVEFORM", juce::dontSendNotification);
-    ringWaveformLabel.setJustificationType (juce::Justification::centred);
-    ringWaveformLabel.setColour (juce::Label::textColourId, juce::Colour (0xfff0e5d2));
-    ringWaveformLabel.setFont (juce::Font (10.0f, juce::Font::bold));
-    ringWaveformAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+    ringWaveformAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>
                              (audioProcessor.apvts, "ringWaveform", ringWaveformSelector);
     ringModSwitchAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
                               (audioProcessor.apvts, "ringEnabled", ringModSwitch);
@@ -222,10 +259,9 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     addAndMakeVisible (waveguideSwitch);
     addAndMakeVisible (ringRateKnob);
     addAndMakeVisible (ringDepthKnob);
+    addAndMakeVisible (ringWaveformSelector);
     addAndMakeVisible (ringFineKnob);
     addAndMakeVisible (ringMixKnob);
-    addAndMakeVisible (ringWaveformLabel);
-    addAndMakeVisible (ringWaveformSelector);
     addAndMakeVisible (ringModSwitch);
 }
 
@@ -248,16 +284,16 @@ void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
 
     g.setFont (juce::Font (22.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xfff0e7d8));
-    g.drawText ("HUNTERICE  /  WAVERING DISTORTION", 35, 38, getWidth() - 70, 30,
+    g.drawText ("HUNTERICE  /  WAVERING DISTORTION", 35, 25, getWidth() - 70, 30,
                 juce::Justification::centred);
     g.setFont (juce::Font (10.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xffffbd68));
-    g.drawText ("ANALOG-INSPIRED SATURATION  •  MODULAR EFFECTS", 35, 70, getWidth() - 70, 18,
+    g.drawText ("ANALOG-INSPIRED SATURATION  •  MODULAR EFFECTS", 35, 55, getWidth() - 70, 18,
                 juce::Justification::centred);
 
-    const juce::Rectangle<float> distortionPanel (38.0f, 112.0f, static_cast<float> (getWidth() - 76), 185.0f);
-    const juce::Rectangle<float> waveguidePanel (38.0f, 370.0f, static_cast<float> (getWidth() - 76), 185.0f);
-    const juce::Rectangle<float> ringPanel (38.0f, 628.0f, static_cast<float> (getWidth() - 76), 185.0f);
+    const juce::Rectangle<float> distortionPanel (38.0f, 95.0f, static_cast<float> (getWidth() - 76), 165.0f);
+    const juce::Rectangle<float> waveguidePanel (38.0f, 335.0f, static_cast<float> (getWidth() - 76), 165.0f);
+    const juce::Rectangle<float> ringPanel (38.0f, 575.0f, static_cast<float> (getWidth() - 76), 165.0f);
     g.setColour (juce::Colours::black.withAlpha (0.38f));
     g.fillRoundedRectangle (distortionPanel, 8.0f);
     g.fillRoundedRectangle (waveguidePanel, 8.0f);
@@ -269,12 +305,12 @@ void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
 
     g.setFont (juce::Font (9.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xffffbd68));
-    g.drawText ("DISTORTION", 45, 98, getWidth() - 90, 12, juce::Justification::centred);
-    g.drawText ("WAVEGUIDE RESONATOR", 45, 356, getWidth() - 90, 12, juce::Justification::centred);
-    g.drawText ("RING MODULATOR", 45, 614, getWidth() - 90, 12, juce::Justification::centred);
+    g.drawText ("DISTORTION", 45, 80, getWidth() - 90, 12, juce::Justification::centred);
+    g.drawText ("WAVEGUIDE RESONATOR", 45, 320, getWidth() - 90, 12, juce::Justification::centred);
+    g.drawText ("RING MODULATOR", 45, 560, getWidth() - 90, 12, juce::Justification::centred);
     g.setFont (juce::Font (9.0f));
     g.setColour (juce::Colour (0xffaeb6b7));
-    g.drawText ("MODULAR EFFECT CHAIN  •  DISTORTION → WAVEGUIDE → RING MOD", 40, 890,
+    g.drawText ("MODULAR EFFECT CHAIN  •  DISTORTION → WAVEGUIDE → RING MOD", 40, 798,
                 getWidth() - 80, 14, juce::Justification::centred);
 }
 
@@ -287,32 +323,30 @@ void WaveringAudioProcessorEditor::resized()
     const int startX = (getWidth() - totalWidth) / 2;
 
     int x = (getWidth() - (112 * 5 + 18 * 4)) / 2;
-    driveKnob.setBounds (x, 132, 112, 142); x += 130;
-    toneKnob.setBounds (x, 132, 112, 142); x += 130;
-    biasKnob.setBounds (x, 132, 112, 142); x += 130;
-    bodyKnob.setBounds (x, 132, 112, 142); x += 130;
-    mixKnob.setBounds (x, 132, 112, 142);
-    distortionSwitch.setBounds (getWidth() / 2 - 88, 303, 176, 44);
+    driveKnob.setBounds (x, 103, 112, 142); x += 130;
+    toneKnob.setBounds (x, 103, 112, 142); x += 130;
+    biasKnob.setBounds (x, 103, 112, 142); x += 130;
+    bodyKnob.setBounds (x, 103, 112, 142); x += 130;
+    mixKnob.setBounds (x, 103, 112, 142);
+    distortionSwitch.setBounds (getWidth() / 2 - 88, 260, 176, 44);
 
     x = startX;
-    rateKnob.setBounds (x, 390, knobWidth, knobHeight); x += knobWidth + gap;
-    resonanceKnob.setBounds (x, 390, knobWidth, knobHeight); x += knobWidth + gap;
-    feedbackKnob.setBounds (x, 390, knobWidth, knobHeight); x += knobWidth + gap;
-    dampingKnob.setBounds (x, 390, knobWidth, knobHeight); x += knobWidth + gap;
-    characterKnob.setBounds (x, 390, knobWidth, knobHeight); x += knobWidth + gap;
-    waveMixKnob.setBounds (x, 390, knobWidth, knobHeight);
-    waveguideSwitch.setBounds (getWidth() / 2 - 88, 561, 176, 44);
+    rateKnob.setBounds (x, 343, knobWidth, knobHeight); x += knobWidth + gap;
+    resonanceKnob.setBounds (x, 343, knobWidth, knobHeight); x += knobWidth + gap;
+    feedbackKnob.setBounds (x, 343, knobWidth, knobHeight); x += knobWidth + gap;
+    dampingKnob.setBounds (x, 343, knobWidth, knobHeight); x += knobWidth + gap;
+    characterKnob.setBounds (x, 343, knobWidth, knobHeight); x += knobWidth + gap;
+    waveMixKnob.setBounds (x, 343, knobWidth, knobHeight);
+    waveguideSwitch.setBounds (getWidth() / 2 - 88, 500, 176, 44);
 
     constexpr int ringKnobWidth = 112;
     constexpr int ringGap = 18;
     const int ringStart = (getWidth() - (ringKnobWidth * 5 + ringGap * 4)) / 2;
     x = ringStart;
-    ringRateKnob.setBounds (x, 648, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
-    ringDepthKnob.setBounds (x, 648, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
-    ringWaveformLabel.setBounds (x, 656, ringKnobWidth, 20);
-    ringWaveformSelector.setBounds (x + 5, 684, ringKnobWidth - 10, 30);
-    x += ringKnobWidth + ringGap;
-    ringFineKnob.setBounds (x, 648, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
-    ringMixKnob.setBounds (x, 648, ringKnobWidth, knobHeight);
-    ringModSwitch.setBounds (getWidth() / 2 - 88, 819, 176, 44);
+    ringRateKnob.setBounds (x, 583, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
+    ringDepthKnob.setBounds (x, 583, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
+    ringWaveformSelector.setBounds (x, 583, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
+    ringFineKnob.setBounds (x, 583, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
+    ringMixKnob.setBounds (x, 583, ringKnobWidth, knobHeight);
+    ringModSwitch.setBounds (getWidth() / 2 - 88, 745, 176, 44);
 }

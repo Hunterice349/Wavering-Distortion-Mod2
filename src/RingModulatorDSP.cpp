@@ -3,7 +3,6 @@
 namespace
 {
 constexpr float pi = 3.14159265358979323846f;
-constexpr float centsPerSemitone = 100.0f;
 }
 
 void RingModulatorDSP::Smoother::reset (int rampSamples, float initial) noexcept
@@ -69,9 +68,9 @@ float RingModulatorDSP::oscillator (int waveform, float phaseValue, float phaseI
 {
     switch (waveform)
     {
-        case 1: // Triangle: continuous corners have substantially less aliasing than a naive square.
+        case 1:
             return 1.0f - 4.0f * std::abs (phaseValue - 0.5f);
-        case 2: // PolyBLEP-corrected square.
+        case 2:
         {
             float value = phaseValue < 0.5f ? 1.0f : -1.0f;
             value += polyBlep (phaseValue, phaseIncrement);
@@ -81,7 +80,7 @@ float RingModulatorDSP::oscillator (int waveform, float phaseValue, float phaseI
             value -= polyBlep (shifted, phaseIncrement);
             return value;
         }
-        case 3: // PolyBLEP-corrected saw.
+        case 3:
             return 2.0f * phaseValue - 1.0f - polyBlep (phaseValue, phaseIncrement);
         case 0:
         default:
@@ -135,21 +134,22 @@ void RingModulatorDSP::processFrame (float inputLeft, float inputRight, bool ste
         return;
     }
 
-    const float dryLeft = finiteOrZero (inputLeft);
-    const float dryRight = stereo ? finiteOrZero (inputRight) : dryLeft;
-
-    // Keep clean settings exactly clean, independent of MIX.
+    // At these settings the effect is mathematically a bypass. Do not route the
+    // signal through any arithmetic, so clean input remains exactly unchanged.
     if (mix <= 0.0f || depth <= 0.0f || rate <= 0.0f)
     {
-        outputLeft = dryLeft + (inputLeft - dryLeft) * (1.0f - enabled);
-        outputRight = stereo ? dryRight + (inputRight - dryRight) * (1.0f - enabled) : 0.0f;
+        outputLeft = inputLeft;
+        outputRight = stereo ? inputRight : 0.0f;
         return;
     }
 
-    // RATE is exponential from 0.1 Hz to 2 kHz. FINE is +/-100 cents,
-    // applied as a continuous frequency multiplier without resetting phase.
+    const float dryLeft = finiteOrZero (inputLeft);
+    const float dryRight = stereo ? finiteOrZero (inputRight) : dryLeft;
+
+    // RATE maps exponentially to 0.1..2000 Hz. FINE spans exactly -100..+100
+    // cents across its 0..10 range (5 is neutral), without resetting phase.
     const float baseFrequency = 0.1f * std::pow (20000.0f, rate * 0.1f);
-    const float cents = (fine - 5.0f) * (2.0f * centsPerSemitone);
+    const float cents = (fine - 5.0f) * 20.0f;
     const float tunedFrequency = baseFrequency * std::exp2 (cents / 1200.0f);
     const float maximumFrequency = static_cast<float> (sampleRate * 0.45);
     const float frequency = std::clamp (finiteOrZero (tunedFrequency), 0.0f, maximumFrequency);
