@@ -1,0 +1,2 @@
+GitHub Copilot write access verification.
+This file is temporary and does not affect the plugin build.
