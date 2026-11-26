@@ -21,8 +21,8 @@ jobs:
       - name: Configure CMake
         run: cmake -B build -S . -A x64
 
-      - name: Build DistortionDSPTests
-        run: cmake --build build --config Release --target DistortionDSPTests
+      - name: Build all DSP tests
+        run: cmake --build build --config Release --target DistortionDSPTests WaveguideDSPTests RingModulatorDSPTests SpectralDelayDSPTests
 
       - name: Run CTest
         run: ctest --test-dir build -C Release --output-on-failure
