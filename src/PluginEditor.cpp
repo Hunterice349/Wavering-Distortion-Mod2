@@ -1,5 +1,14 @@
 #include "PluginEditor.h"
 
+namespace
+{
+// Map UI order to stable APVTS choice indices. The original saved values remain
+// 0=50%, 1=100%, 2=200%; newly introduced scales occupy appended indices.
+constexpr int scaleChoiceForItem[] { -1, 0, 3, 4, 5, 6, 1, 2 };
+constexpr int scaleItemForChoice[] { 1, 6, 7, 2, 3, 4, 5 };
+constexpr float scaleFactors[] { 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 2.0f };
+}
+
 MetalKnob::MetalKnob (const juce::String& text) : labelText (text)
 {
     setSliderStyle (juce::Slider::RotaryVerticalDrag);
@@ -164,8 +173,12 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     scaleLabel.setColour (juce::Label::textColourId, juce::Colour (0xfff0e5d2));
     scaleLabel.setFont (juce::Font (9.0f, juce::Font::bold));
     scaleSelector.addItem ("50%", 1);
-    scaleSelector.addItem ("100%", 2);
-    scaleSelector.addItem ("200%", 3);
+    scaleSelector.addItem ("60%", 2);
+    scaleSelector.addItem ("70%", 3);
+    scaleSelector.addItem ("80%", 4);
+    scaleSelector.addItem ("90%", 5);
+    scaleSelector.addItem ("100%", 6);
+    scaleSelector.addItem ("200%", 7);
     scaleSelector.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff30363b));
     scaleSelector.setColour (juce::ComboBox::textColourId, juce::Colour (0xffffc775));
     scaleSelector.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xffa8b0b3));
@@ -218,13 +231,15 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     scaledContent.addAndMakeVisible (ringMixKnob);
     scaledContent.addAndMakeVisible (ringModSwitch);
 
-    const auto storedChoice = audioProcessor.apvts.getRawParameterValue ("uiScale")->load();
-    const int selectedItemId = juce::jlimit (1, 3, static_cast<int> (std::lround (storedChoice)) + 1);
+    // The APVTS value stores its stable choice index. Mapping keeps the old
+    // indices (0=50%, 1=100%, 2=200%) intact while the UI lists scales in order.
+    const auto storedChoice = juce::jlimit (0, 6, static_cast<int> (
+        std::lround (audioProcessor.apvts.getRawParameterValue ("uiScale")->load())));
+    const int selectedItemId = scaleItemForChoice[storedChoice];
     scaleSelector.setSelectedId (selectedItemId, juce::dontSendNotification);
     scaleSelector.addListener (this);
     audioProcessor.apvts.addParameterListener ("uiScale", this);
     pendingScaleChoice.store (selectedItemId - 1);
-
     applyScaleMode (selectedItemId);
 }
 
@@ -240,12 +255,12 @@ void WaveringAudioProcessorEditor::comboBoxChanged (juce::ComboBox* comboBox)
     if (comboBox != &scaleSelector)
         return;
 
-    const int itemId = juce::jlimit (1, 3, scaleSelector.getSelectedId());
+    const int itemId = juce::jlimit (1, 7, scaleSelector.getSelectedId());
     if (auto* parameter = audioProcessor.apvts.getParameter ("uiScale"))
     {
-        const float choice = static_cast<float> (itemId - 1);
+        const float stableChoice = static_cast<float> (scaleChoiceForItem[itemId]);
         parameter->beginChangeGesture();
-        parameter->setValueNotifyingHost (parameter->convertTo0to1 (choice));
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (stableChoice));
         parameter->endChangeGesture();
     }
 
@@ -256,7 +271,8 @@ void WaveringAudioProcessorEditor::parameterChanged (const juce::String& paramet
 {
     if (parameterID == "uiScale")
     {
-        pendingScaleChoice.store (juce::jlimit (0, 2, static_cast<int> (std::lround (newValue))));
+        const int choiceIndex = juce::jlimit (0, 6, static_cast<int> (std::lround (newValue)));
+        pendingScaleChoice.store (scaleItemForChoice[choiceIndex] - 1);
         triggerAsyncUpdate();
     }
 }
@@ -271,8 +287,8 @@ void WaveringAudioProcessorEditor::handleAsyncUpdate()
 
 void WaveringAudioProcessorEditor::applyScaleMode (int selectedItemId)
 {
-    const int itemId = juce::jlimit (1, 3, selectedItemId);
-    const float scale = itemId == 1 ? 0.5f : (itemId == 3 ? 2.0f : 1.0f);
+    const int itemId = juce::jlimit (1, 7, selectedItemId);
+    const float scale = scaleFactors[itemId - 1];
 
     scaledContent.setTransform (juce::AffineTransform::scale (scale));
     setSize (juce::roundToInt (designWidth * scale), juce::roundToInt (designHeight * scale));
@@ -299,8 +315,6 @@ void WaveringAudioProcessorEditor::paintDesign (juce::Graphics& g)
     g.setColour (juce::Colour (0xffd3d9d9).withAlpha (0.25f));
     g.drawRoundedRectangle (face.reduced (1.0f), 10.0f, 1.0f);
 
-    // Reserve the header's right side for the scale selector, so title and
-    // subtitle remain legible without overlapping at every selected scale.
     g.setFont (juce::Font (22.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xfff0e7d8));
     g.drawText ("HUNTERICE  /  WAVERING DISTORTION", 35, 25, 510, 30, juce::Justification::centred);
@@ -369,7 +383,6 @@ void WaveringAudioProcessorEditor::resized()
     ringMixKnob.setBounds (x, 583, ringKnobWidth, knobHeight);
     ringModSwitch.setBounds (designWidth / 2 - 88, 745, 176, 44);
 
-    // Place the scale controls in the reserved top-right header area.
     scaleLabel.setBounds (560, 20, 72, 22);
     scaleSelector.setBounds (636, 18, 94, 26);
 }
