@@ -22,6 +22,8 @@ target_sources(WaveringDistortionMod PRIVATE
     src/DistortionDSP.h
     src/WaveguideDSP.cpp
     src/WaveguideDSP.h
+    src/RingModulatorDSP.cpp
+    src/RingModulatorDSP.h
     src/PluginProcessor.cpp
     src/PluginProcessor.h
     src/PluginEditor.cpp

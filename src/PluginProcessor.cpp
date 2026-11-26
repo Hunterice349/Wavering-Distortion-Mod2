@@ -52,6 +52,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout WaveringAudioProcessor::crea
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { "waveguideEnabled", 1 }, "Waveguide On", false));
 
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "ringRate", 1 }, "Ring Mod Rate", controlRange, 5.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "ringDepth", 1 }, "Ring Mod Depth", controlRange, 5.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "ringWaveform", 1 }, "Ring Mod Waveform",
+        juce::StringArray { "Sine", "Triangle", "Square", "Saw" }, 0));
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "ringFine", 1 }, "Ring Mod Fine", controlRange, 5.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "ringMix", 1 }, "Ring Mod Mix", controlRange, 5.0f,
+        FloatAttributes().withLabel ("")));
+    parameters.push_back (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "ringEnabled", 1 }, "Ring Mod On", false));
+
     return { parameters.begin(), parameters.end() };
 }
 
@@ -80,6 +98,18 @@ WaveguideDSP::Parameters WaveringAudioProcessor::readWaveguideParameters() const
     return parameters;
 }
 
+RingModulatorDSP::Parameters WaveringAudioProcessor::readRingModulatorParameters() const noexcept
+{
+    RingModulatorDSP::Parameters parameters;
+    parameters.rate = apvts.getRawParameterValue ("ringRate")->load();
+    parameters.depth = apvts.getRawParameterValue ("ringDepth")->load();
+    parameters.waveform = static_cast<int> (std::lround (apvts.getRawParameterValue ("ringWaveform")->load()));
+    parameters.fine = apvts.getRawParameterValue ("ringFine")->load();
+    parameters.mix = apvts.getRawParameterValue ("ringMix")->load();
+    parameters.enabled = apvts.getRawParameterValue ("ringEnabled")->load() > 0.5f;
+    return parameters;
+}
+
 bool WaveringAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     const auto& output = layouts.getMainOutputChannelSet();
@@ -93,12 +123,14 @@ void WaveringAudioProcessor::prepareToPlay (double sampleRate, int)
     currentSampleRate = std::isfinite (sampleRate) && sampleRate > 1.0 ? sampleRate : 44100.0;
     distortion.prepare (currentSampleRate, readDistortionParameters());
     waveguide.prepare (currentSampleRate, readWaveguideParameters());
+    ringModulator.prepare (currentSampleRate, readRingModulatorParameters());
 }
 
 void WaveringAudioProcessor::releaseResources()
 {
     distortion.reset();
     waveguide.reset();
+    ringModulator.reset();
 }
 
 void WaveringAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -116,6 +148,7 @@ void WaveringAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
 
     distortion.setParameters (readDistortionParameters());
     waveguide.setParameters (readWaveguideParameters());
+    ringModulator.setParameters (readRingModulatorParameters());
     const bool stereo = outputChannels > 1 && inputChannels > 1;
     float* left = buffer.getWritePointer (0);
     float* right = stereo ? buffer.getWritePointer (1) : nullptr;
@@ -127,8 +160,11 @@ void WaveringAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         float distortedLeft = 0.0f, distortedRight = 0.0f;
         distortion.processFrame (inputLeft, inputRight, stereo, distortedLeft, distortedRight);
 
+        float resonatedLeft = 0.0f, resonatedRight = 0.0f;
+        waveguide.processFrame (distortedLeft, distortedRight, stereo, resonatedLeft, resonatedRight);
+
         float outputLeft = 0.0f, outputRight = 0.0f;
-        waveguide.processFrame (distortedLeft, distortedRight, stereo, outputLeft, outputRight);
+        ringModulator.processFrame (resonatedLeft, resonatedRight, stereo, outputLeft, outputRight);
         left[sample] = outputLeft;
         if (stereo)
             right[sample] = outputRight;

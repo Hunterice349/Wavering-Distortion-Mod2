@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "DistortionDSP.h"
 #include "WaveguideDSP.h"
+#include "RingModulatorDSP.h"
 
 class WaveringAudioProcessor : public juce::AudioProcessor
 {
@@ -39,10 +40,12 @@ public:
 private:
     DistortionDSP distortion;
     WaveguideDSP waveguide;
+    RingModulatorDSP ringModulator;
     double currentSampleRate = 44100.0;
 
     DistortionDSP::Parameters readDistortionParameters() const noexcept;
     WaveguideDSP::Parameters readWaveguideParameters() const noexcept;
+    RingModulatorDSP::Parameters readRingModulatorParameters() const noexcept;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringAudioProcessor)
 };

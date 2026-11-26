@@ -127,11 +127,45 @@ void WaveguideSwitch::paintButton (juce::Graphics& g, bool highlighted, bool dow
                 juce::Justification::centred);
 }
 
+RingModSwitch::RingModSwitch() : juce::Button ("Ring Modulator on/off")
+{
+    setClickingTogglesState (true);
+}
+
+void RingModSwitch::paintButton (juce::Graphics& g, bool highlighted, bool down)
+{
+    const auto bounds = getLocalBounds().toFloat();
+    const auto track = bounds.withHeight (juce::jmin (25.0f, bounds.getHeight()));
+    const bool enabled = getToggleState();
+    g.setColour (juce::Colours::black.withAlpha (0.55f));
+    g.fillRoundedRectangle (track.translated (1.0f, 2.0f), 7.0f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd5d9dc), track.getX(), track.getY(),
+                                              juce::Colour (0xff41484d), track.getX(), track.getBottom(), false));
+    g.fillRoundedRectangle (track, 7.0f);
+    const float x = enabled ? track.getRight() - 35.0f : track.getX() + 5.0f;
+    juce::Rectangle<float> toggle (x, track.getY() + 3.0f, 30.0f, track.getHeight() - 6.0f);
+    if (down || highlighted)
+        toggle = toggle.reduced (0.5f);
+    g.setColour (juce::Colours::black.withAlpha (0.5f));
+    g.fillRoundedRectangle (toggle.translated (0.0f, 2.0f), 5.0f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfff6f7f5), toggle.getX(), toggle.getY(),
+                                              juce::Colour (0xff737b80), toggle.getRight(), toggle.getBottom(), false));
+    g.fillRoundedRectangle (toggle, 5.0f);
+    g.setColour (enabled ? juce::Colour (0xff64ff9c) : juce::Colour (0xff572a26));
+    g.fillEllipse (track.getCentreX() - 4.0f, track.getCentreY() - 4.0f, 8.0f, 8.0f);
+    g.setFont (juce::Font (10.0f, juce::Font::bold));
+    g.setColour (juce::Colour (0xfff4ead8));
+    g.drawText (enabled ? "RING MOD  ON" : "RING MOD  OFF",
+                juce::Rectangle<float> (bounds.getX(), track.getBottom() + 2.0f,
+                                        bounds.getWidth(), bounds.getHeight() - track.getHeight() - 2.0f),
+                juce::Justification::centred);
+}
+
 WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcessor& processor)
     : AudioProcessorEditor (&processor), audioProcessor (processor)
 {
     setResizable (false, false);
-    setSize (760, 690);
+    setSize (760, 920);
 
     const auto attachSlider = [this] (const juce::String& parameter, juce::Slider& slider)
     {
@@ -155,6 +189,24 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     waveguideSwitchAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
                                 (audioProcessor.apvts, "waveguideEnabled", waveguideSwitch);
 
+    attachSlider ("ringRate", ringRateKnob);
+    attachSlider ("ringDepth", ringDepthKnob);
+    attachSlider ("ringFine", ringFineKnob);
+    attachSlider ("ringMix", ringMixKnob);
+    ringWaveformSelector.addItemList ({ "Sine", "Triangle", "Square", "Saw" }, 1);
+    ringWaveformSelector.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff30363b));
+    ringWaveformSelector.setColour (juce::ComboBox::textColourId, juce::Colour (0xffffc775));
+    ringWaveformSelector.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xffa8b0b3));
+    ringWaveformSelector.setJustificationType (juce::Justification::centred);
+    ringWaveformLabel.setText ("WAVEFORM", juce::dontSendNotification);
+    ringWaveformLabel.setJustificationType (juce::Justification::centred);
+    ringWaveformLabel.setColour (juce::Label::textColourId, juce::Colour (0xfff0e5d2));
+    ringWaveformLabel.setFont (juce::Font (10.0f, juce::Font::bold));
+    ringWaveformAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+                             (audioProcessor.apvts, "ringWaveform", ringWaveformSelector);
+    ringModSwitchAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
+                              (audioProcessor.apvts, "ringEnabled", ringModSwitch);
+
     addAndMakeVisible (driveKnob);
     addAndMakeVisible (toneKnob);
     addAndMakeVisible (biasKnob);
@@ -168,6 +220,13 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     addAndMakeVisible (characterKnob);
     addAndMakeVisible (waveMixKnob);
     addAndMakeVisible (waveguideSwitch);
+    addAndMakeVisible (ringRateKnob);
+    addAndMakeVisible (ringDepthKnob);
+    addAndMakeVisible (ringFineKnob);
+    addAndMakeVisible (ringMixKnob);
+    addAndMakeVisible (ringWaveformLabel);
+    addAndMakeVisible (ringWaveformSelector);
+    addAndMakeVisible (ringModSwitch);
 }
 
 void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
@@ -193,26 +252,30 @@ void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
                 juce::Justification::centred);
     g.setFont (juce::Font (10.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xffffbd68));
-    g.drawText ("ANALOG-INSPIRED SATURATION  •  DISTORTION MODULE", 35, 70, getWidth() - 70, 18,
+    g.drawText ("ANALOG-INSPIRED SATURATION  •  MODULAR EFFECTS", 35, 70, getWidth() - 70, 18,
                 juce::Justification::centred);
 
-    juce::Rectangle<float> distortionPanel (38.0f, 112.0f, static_cast<float> (getWidth() - 76), 185.0f);
-    juce::Rectangle<float> waveguidePanel (38.0f, 388.0f, static_cast<float> (getWidth() - 76), 185.0f);
+    const juce::Rectangle<float> distortionPanel (38.0f, 112.0f, static_cast<float> (getWidth() - 76), 185.0f);
+    const juce::Rectangle<float> waveguidePanel (38.0f, 370.0f, static_cast<float> (getWidth() - 76), 185.0f);
+    const juce::Rectangle<float> ringPanel (38.0f, 628.0f, static_cast<float> (getWidth() - 76), 185.0f);
     g.setColour (juce::Colours::black.withAlpha (0.38f));
     g.fillRoundedRectangle (distortionPanel, 8.0f);
     g.fillRoundedRectangle (waveguidePanel, 8.0f);
+    g.fillRoundedRectangle (ringPanel, 8.0f);
     g.setColour (juce::Colour (0xffa8b0b3).withAlpha (0.22f));
     g.drawRoundedRectangle (distortionPanel, 8.0f, 1.0f);
     g.drawRoundedRectangle (waveguidePanel, 8.0f, 1.0f);
+    g.drawRoundedRectangle (ringPanel, 8.0f, 1.0f);
 
     g.setFont (juce::Font (9.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xffffbd68));
     g.drawText ("DISTORTION", 45, 98, getWidth() - 90, 12, juce::Justification::centred);
-    g.drawText ("WAVEGUIDE RESONATOR", 45, 374, getWidth() - 90, 12, juce::Justification::centred);
+    g.drawText ("WAVEGUIDE RESONATOR", 45, 356, getWidth() - 90, 12, juce::Justification::centred);
+    g.drawText ("RING MODULATOR", 45, 614, getWidth() - 90, 12, juce::Justification::centred);
     g.setFont (juce::Font (9.0f));
     g.setColour (juce::Colour (0xffaeb6b7));
-    g.drawText ("MODULAR EFFECT CHAIN  •  DISTORTION → WAVEGUIDE", 40, 660, getWidth() - 80, 14,
-                juce::Justification::centred);
+    g.drawText ("MODULAR EFFECT CHAIN  •  DISTORTION → WAVEGUIDE → RING MOD", 40, 890,
+                getWidth() - 80, 14, juce::Justification::centred);
 }
 
 void WaveringAudioProcessorEditor::resized()
@@ -232,11 +295,24 @@ void WaveringAudioProcessorEditor::resized()
     distortionSwitch.setBounds (getWidth() / 2 - 88, 303, 176, 44);
 
     x = startX;
-    rateKnob.setBounds (x, 408, knobWidth, knobHeight); x += knobWidth + gap;
-    resonanceKnob.setBounds (x, 408, knobWidth, knobHeight); x += knobWidth + gap;
-    feedbackKnob.setBounds (x, 408, knobWidth, knobHeight); x += knobWidth + gap;
-    dampingKnob.setBounds (x, 408, knobWidth, knobHeight); x += knobWidth + gap;
-    characterKnob.setBounds (x, 408, knobWidth, knobHeight); x += knobWidth + gap;
-    waveMixKnob.setBounds (x, 408, knobWidth, knobHeight);
-    waveguideSwitch.setBounds (getWidth() / 2 - 88, 579, 176, 44);
+    rateKnob.setBounds (x, 390, knobWidth, knobHeight); x += knobWidth + gap;
+    resonanceKnob.setBounds (x, 390, knobWidth, knobHeight); x += knobWidth + gap;
+    feedbackKnob.setBounds (x, 390, knobWidth, knobHeight); x += knobWidth + gap;
+    dampingKnob.setBounds (x, 390, knobWidth, knobHeight); x += knobWidth + gap;
+    characterKnob.setBounds (x, 390, knobWidth, knobHeight); x += knobWidth + gap;
+    waveMixKnob.setBounds (x, 390, knobWidth, knobHeight);
+    waveguideSwitch.setBounds (getWidth() / 2 - 88, 561, 176, 44);
+
+    constexpr int ringKnobWidth = 112;
+    constexpr int ringGap = 18;
+    const int ringStart = (getWidth() - (ringKnobWidth * 5 + ringGap * 4)) / 2;
+    x = ringStart;
+    ringRateKnob.setBounds (x, 648, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
+    ringDepthKnob.setBounds (x, 648, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
+    ringWaveformLabel.setBounds (x, 656, ringKnobWidth, 20);
+    ringWaveformSelector.setBounds (x + 5, 684, ringKnobWidth - 10, 30);
+    x += ringKnobWidth + ringGap;
+    ringFineKnob.setBounds (x, 648, ringKnobWidth, knobHeight); x += ringKnobWidth + ringGap;
+    ringMixKnob.setBounds (x, 648, ringKnobWidth, knobHeight);
+    ringModSwitch.setBounds (getWidth() / 2 - 88, 819, 176, 44);
 }

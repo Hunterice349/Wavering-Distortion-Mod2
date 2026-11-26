@@ -30,6 +30,14 @@ public:
                       bool shouldDrawButtonAsDown) override;
 };
 
+class RingModSwitch : public juce::Button
+{
+public:
+    RingModSwitch();
+    void paintButton (juce::Graphics&, bool shouldDrawButtonAsHighlighted,
+                      bool shouldDrawButtonAsDown) override;
+};
+
 class WaveringAudioProcessorEditor : public juce::AudioProcessorEditor
 {
 public:
@@ -47,9 +55,16 @@ private:
     MetalKnob rateKnob { "RATE" }, resonanceKnob { "RESONANCE" }, feedbackKnob { "FEEDBACK" },
               dampingKnob { "DAMPING" }, characterKnob { "CHARACTER" }, waveMixKnob { "MIX" };
     WaveguideSwitch waveguideSwitch;
+    MetalKnob ringRateKnob { "RATE" }, ringDepthKnob { "DEPTH" }, ringFineKnob { "FINE" },
+              ringMixKnob { "MIX" };
+    juce::ComboBox ringWaveformSelector;
+    juce::Label ringWaveformLabel;
+    RingModSwitch ringModSwitch;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> switchAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> waveguideSwitchAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ringModSwitchAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> ringWaveformAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringAudioProcessorEditor)
 };
