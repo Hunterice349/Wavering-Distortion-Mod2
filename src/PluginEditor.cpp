@@ -1,350 +1,942 @@
-/*
-  ==============================================================================
-    PluginEditor.cpp
-    WAVERING DISTORTION MOD - Premium GUI Implementation
-  ==============================================================================
-*/
-
 #include "PluginEditor.h"
-#include "PluginProcessor.h"
 
-// ==============================================================================
-// VU METER IMPLEMENTATION
-// ==============================================================================
+#include <cmath>
 
-void WaveringDistortionModAudioProcessorEditor::VUMeterComponent::updateLevels(float rms, float peak)
+//==============================================================================
+// GOTHIC RED NEON COLOUR PALETTE
+//==============================================================================
+
+namespace PremiumColours
 {
-    // Простое сглаживание для стрелки можно добавить здесь, но пока берем сырые данные
-    // Для плавности лучше использовать interpolation в paint или отдельном таймере компонента
-    currentRms = rms;
+    const juce::Colour black { 0xff0a0a0a };
+    const juce::Colour darkMetal { 0xff1a1a1a };
+    const juce::Colour metalLight { 0xff8a8a8a };
+    const juce::Colour metalDark { 0xff2a2a2a };
+    const juce::Colour walnutDark { 0xff1a0f0a };
+    const juce::Colour walnutMid { 0xff3a2518 };
+    const juce::Colour walnutLite { 0xff5a3a28 };
+    
+    // RED NEON PALETTE
+    const juce::Colour neonRed { 0xffff1a1a };
+    const juce::Colour crimsonRed { 0xffdc143c };
+    const juce::Colour deepRed { 0xff8b0000 };
+    const juce::Colour redGlow { 0xffff4444 };
+    const juce::Colour coldMetal { 0xff6a6a7a };
+    
+    const juce::Colour ivory { 0xffe8e8e8 };
 }
 
-void WaveringDistortionModAudioProcessorEditor::VUMeterComponent::paint(juce::Graphics& g)
+//==============================================================================
+// NUMERIC TEXT BOX FOR DIRECT VALUE INPUT
+//==============================================================================
+
+class MetalKnob::NumericTextBox : public juce::TextEditor
 {
-    auto bounds = getLocalBounds().toFloat();
-    
-    // 1. Фон (темное стекло/металл)
-    g.setColour(juce::Colours::black.withAlpha(0.9f));
-    g.fillRoundedRectangle(bounds, 15.0f);
-    
-    // 2. Рамка
-    g.setColour(juce::Colours::grey.withAlpha(0.5f));
-    g.drawRoundedRectangle(bounds, 15.0f, 2.0f);
-    
-    // 3. Шкала
-    float centerX = bounds.getWidth() / 2.0f;
-    float centerY = bounds.getHeight() * 0.85f;
-    float radius = jmin(bounds.getWidth(), bounds.getHeight()) * 0.4f;
-    
-    g.setColour(juce::Colours::white.withAlpha(0.6f));
-    g.setFont(10.0f);
-    
-    // Рисуем деления (-20dB to +3dB)
-    for (int db = -20; db <= 3; db += 1)
+public:
+    NumericTextBox(MetalKnob& ownerKnob) : owner(ownerKnob)
     {
-        // Маппинг: -20dB -> -60 deg, 0dB -> 0 deg, +3dB -> +10 deg
-        float norm = (float)(db + 20) / 23.0f; 
-        float angleDeg = -60.0f + (norm * 70.0f);
-        float angleRad = juce::degreesToRadians(angleDeg);
+        setMultiLine(false);
+        setJustification(juce::Justification::centred);
+        setInputRestrictions(10, "-0123456789.");
         
-        float x1 = centerX + std::cos(angleRad) * (radius - 5);
-        float y1 = centerY - std::sin(angleRad) * (radius - 5);
-        float x2 = centerX + std::cos(angleRad) * radius;
-        float y2 = centerY - std::sin(angleRad) * radius;
+        setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff1a1a1a));
+        setColour(juce::TextEditor::textColourId, PremiumColours::neonRed);
+        setColour(juce::TextEditor::outlineColourId, PremiumColours::metalDark);
+        setColour(juce::TextEditor::focusedOutlineColourId, PremiumColours::neonRed);
+        setColour(juce::CaretComponent::caretColourId, PremiumColours::neonRed);
         
-        g.drawLine(x1, y1, x2, y2, db % 5 == 0 ? 2.0f : 1.0f);
+        setFont(juce::Font(13.0f, juce::Font::bold));
         
-        if (db % 5 == 0)
-        {
-            float tx = centerX + std::cos(angleRad) * (radius - 20);
-            float ty = centerY - std::sin(angleRad) * (radius - 20);
-            g.drawText(juce::String(db), juce::Rectangle<float>(tx-10, ty-10, 20, 20), juce::Justification::centred);
-        }
+        onReturnKey = [this] { confirmEdit(); };
+        onEscapeKey = [this] { cancelEdit(); };
+        onFocusLost = [this] { confirmEdit(); };
     }
     
-    // Красная зона
-    g.setColour(juce::Colours::red.withAlpha(0.2f));
-    g.fillArc(centerX, centerY, radius*2, radius*2, 
-              juce::degreesToRadians(-5.0f), juce::degreesToRadians(15.0f), true);
+private:
+    MetalKnob& owner;
+    
+    void confirmEdit()
+    {
+        const auto text = getText();
+        const double value = text.getDoubleValue();
+        
+        if (value >= owner.minValue && value <= owner.maxValue)
+        {
+            owner.setValue(static_cast<float>(value));
+            if (owner.onValueChange)
+                owner.onValueChange(static_cast<float>(value));
+        }
+        
+        updateDisplay();
+        giveAwayKeyboardFocus();
+    }
+    
+    void cancelEdit()
+    {
+        updateDisplay();
+        giveAwayKeyboardFocus();
+    }
+    
+    void updateDisplay()
+    {
+        setText(juce::String(owner.getValue(), 2), false);
+    }
+};
 
-    // 4. Стрелка
-    // Конвертация RMS (0..1) в dB
-    float dbFS = juce::Decibels::gainToDecibels(currentRms, -100.0f);
-    
-    // Маппинг dB в угол
-    float targetNorm = (dbFS + 20.0f) / 23.0f;
-    targetNorm = jlimit(0.0f, 1.0f, targetNorm);
-    
-    float targetAngleDeg = -60.0f + (targetNorm * 70.0f);
-    
-    // Инерция стрелки
-    needlePos = needlePos + (targetAngleDeg - needlePos) * 0.15f;
-    
-    float needleRad = juce::degreesToRadians(needlePos);
-    
-    g.setColour(juce::Colours::black);
-    g.fillEllipse(centerX - 6, centerY - 6, 12, 12);
-    
-    g.setColour(juce::Colours::orangeRed);
-    g.drawLine(centerX, centerY, 
-               centerX + std::cos(needleRad) * (radius - 2), 
-               centerY - std::sin(needleRad) * (radius - 2), 
-               2.0f);
-}
+//==============================================================================
+// METAL KNOB IMPLEMENTATION
+//==============================================================================
 
-// ==============================================================================
-// PREMIUM KNOB IMPLEMENTATION
-// ==============================================================================
-
-WaveringDistortionModAudioProcessorEditor::PremiumKnob::PremiumKnob(juce::AudioProcessorValueTreeState& state, const juce::String& paramID, const juce::String& lbl)
-    : attachment(*state.getParameter(paramID), [this](float) { repaint(); }),
-      label(lbl)
+MetalKnob::MetalKnob(const juce::String& text)
+    : labelText(text)
 {
+    textBox = std::make_unique<NumericTextBox>(*this);
+    addAndMakeVisible(textBox.get());
+    
     setMouseCursor(juce::MouseCursor::PointingHandCursor);
 }
 
-void WaveringDistortionModAudioProcessorEditor::PremiumKnob::paint(juce::Graphics& g)
+void MetalKnob::resized()
 {
-    auto bounds = getLocalBounds().toFloat();
-    float diameter = jmin(bounds.getWidth(), bounds.getHeight());
-    juce::Rectangle<float> knobRect(bounds.getX() + (bounds.getWidth()-diameter)/2, 
-                                    bounds.getY() + (bounds.getHeight()-diameter)/2, 
-                                    diameter, diameter);
-                                    
-    // Тень
-    g.setDropShadow(juce::DropShadow(juce::Colours::black.withAlpha(0.6f), 8, juce::Point<int>(0, 4)));
-    g.fillEllipse(knobRect);
-    g.dropShadow(); 
-    
-    // Металлический корпус (градиент)
-    juce::ColourGradient metalGrad(juce::Colours::silver, knobRect.getX(), knobRect.getY(),
-                                   juce::Colours::darkgrey, knobRect.getX(), knobRect.getBottom(), true);
-    g.setGradientFill(metalGrad);
-    g.fillEllipse(knobRect.reduced(2));
-    
-    // Получаем значение (0.0 - 1.0)
-    // Используем attachment.parameter->getValue(), так как attachment сам по себе не имеет getValue() в старых версиях JUCE
-    float value = attachment.parameter->getValue();
-    
-    // Угол (-135 to +135)
-    float angle = -135.0f + (value * 270.0f);
-    float rad = juce::degreesToRadians(angle);
-    
-    // Индикатор
-    float indRadius = diameter * 0.35f;
-    float ix = knobRect.getCentreX() + std::cos(rad) * indRadius;
-    float iy = knobRect.getCentreY() - std::sin(rad) * indRadius;
-    
-    g.setColour(juce::Colours::white);
-    g.fillEllipse(ix - 3, iy - 3, 6, 6);
-    
-    // Подпись
-    g.setColour(juce::Colours::silver);
-    g.setFont(12.0f);
-    
-    // FIX C2662: Создаем копию bounds для манипуляций
-    auto textBounds = bounds;
-    auto labelArea = textBounds.removeFromBottom(16.0f);
-    g.drawText(label, labelArea, juce::Justification::centred);
+    auto bounds = getLocalBounds();
+    textBox->setBounds(bounds.removeFromBottom(24).reduced(15, 0));
 }
 
-void WaveringDistortionModAudioProcessorEditor::PremiumKnob::mouseDown(const juce::MouseEvent& e)
+void MetalKnob::setValue(float newValue)
 {
-    isDragging = true;
-    lastY = (float)e.y;
-}
-
-void WaveringDistortionModAudioProcessorEditor::PremiumKnob::mouseDrag(const juce::MouseEvent& e)
-{
-    if (!isDragging) return;
-    
-    float deltaY = lastY - (float)e.y;
-    lastY = (float)e.y;
-    
-    // Чувствительность
-    float sensitivity = 0.005f;
-    float currentValue = attachment.parameter->getValue();
-    float newValue = currentValue + (deltaY * sensitivity);
-    newValue = jlimit(0.0f, 1.0f, newValue);
-    
-    attachment.setValueAsPartOfGesture(newValue);
+    currentValue = jlimit(minValue, maxValue, static_cast<double>(newValue));
+    updateTextBox();
     repaint();
 }
 
-void WaveringDistortionModAudioProcessorEditor::PremiumKnob::mouseUp(const juce::MouseEvent& e)
+float MetalKnob::getValue() const
+{
+    return static_cast<float>(currentValue);
+}
+
+void MetalKnob::setRange(double min, double max, double intv)
+{
+    minValue = min;
+    maxValue = max;
+    interval = intv;
+}
+
+void MetalKnob::updateTextBox()
+{
+    if (textBox)
+        textBox->setText(juce::String(currentValue, 2), false);
+}
+
+void MetalKnob::mouseDown(const juce::MouseEvent& e)
+{
+    if (e.mods.isLeftButtonDown() && !textBox->getBounds().contains(e.getPosition()))
+    {
+        isDragging = true;
+        lastY = static_cast<float>(e.y);
+    }
+}
+
+void MetalKnob::mouseDrag(const juce::MouseEvent& e)
+{
+    if (!isDragging) return;
+    
+    const float deltaY = lastY - static_cast<float>(e.y);
+    lastY = static_cast<float>(e.y);
+    
+    const double sensitivity = 0.05 * (maxValue - minValue);
+    const double newValue = currentValue + (deltaY * sensitivity / 100.0);
+    
+    setValue(static_cast<float>(newValue));
+    
+    if (onValueChange)
+        onValueChange(getValue());
+}
+
+void MetalKnob::mouseUp(const juce::MouseEvent& e)
 {
     isDragging = false;
 }
 
-// ==============================================================================
-// POWER FOOTSWITCH IMPLEMENTATION
-// ==============================================================================
-
-WaveringDistortionModAudioProcessorEditor::PowerFootswitch::PowerFootswitch(juce::AudioProcessorValueTreeState& state, const juce::String& paramID)
-    : attachment(*state.getParameter(paramID), [this](float value) { 
-        ledOn = value > 0.5f; 
-        repaint(); 
-    })
+void MetalKnob::mouseDoubleClick(const juce::MouseEvent& e)
 {
-    setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    if (!textBox->getBounds().contains(e.getPosition()))
+    {
+        setValue(static_cast<float>(minValue));
+        if (onValueChange)
+            onValueChange(getValue());
+    }
 }
 
-void WaveringDistortionModAudioProcessorEditor::PowerFootswitch::paint(juce::Graphics& g)
+void MetalKnob::paint(juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().toFloat();
+    const auto bounds = getLocalBounds().toFloat();
+    const float diameter = juce::jmax(
+        20.0f,
+        juce::jmin(
+            bounds.getWidth() - 12.0f,
+            bounds.getHeight() - 42.0f - 28.0f // Space for text box
+        )
+    );
     
-    // Хромированный корпус
-    juce::ColourGradient chromeGrad(juce::Colours::silver, bounds.getX(), bounds.getY(),
-                                    juce::Colours::grey, bounds.getX(), bounds.getBottom(), true);
-    g.setGradientFill(chromeGrad);
+    const float centreX = bounds.getCentreX();
+    const float centreY = bounds.getY() + diameter * 0.5f + 12.0f;
     
-    // Эффект нажатия
-    float shrink = isPressed ? 4.0f : 0.0f;
-    juce::Rectangle<float> switchRect = bounds.reduced(shrink);
+    const juce::Rectangle<float> face(
+        centreX - diameter * 0.5f,
+        centreY - diameter * 0.5f,
+        diameter,
+        diameter
+    );
     
-    g.fillEllipse(switchRect);
+    const float proportion = static_cast<float>(
+        juce::jlimit(
+            0.0,
+            1.0,
+            (currentValue - minValue) / (maxValue - minValue)
+        )
+    );
     
-    // Блик
-    g.setColour(juce::Colours::white.withAlpha(0.4f));
-    g.fillEllipse(switchRect.getX() + switchRect.getWidth()*0.2, 
-                  switchRect.getY() + switchRect.getHeight()*0.1, 
-                  switchRect.getWidth()*0.3, 
-                  switchRect.getHeight()*0.2);
-                  
-    // LED
-    float ledSize = 12.0f;
-    juce::Rectangle<float> ledRect(bounds.getCentreX() - ledSize/2, bounds.getBottom() - 30, ledSize, ledSize);
+    // Shadow
+    g.setColour(juce::Colours::black.withAlpha(0.85f));
+    g.fillEllipse(face.translated(2.0f, 6.0f).expanded(5.0f));
     
-    if (ledOn)
+    // Outer metal ring
+    g.setGradientFill(
+        juce::ColourGradient(
+            PremiumColours::metalLight,
+            face.getX(),
+            face.getY(),
+            PremiumColours::metalDark,
+            face.getRight(),
+            face.getBottom(),
+            false
+        )
+    );
+    g.fillEllipse(face.expanded(5.0f));
+    
+    // Inner metallic body
+    g.setGradientFill(
+        juce::ColourGradient(
+            juce::Colour(0xff3a3a3a),
+            centreX,
+            face.getY(),
+            juce::Colour(0xff1a1a1a),
+            centreX,
+            face.getBottom(),
+            false
+        )
+    );
+    g.fillEllipse(face);
+    
+    // Fine circular border
+    g.setColour(juce::Colours::white.withAlpha(0.25f));
+    g.drawEllipse(face.reduced(2.0f), 1.0f);
+    
+    // Knob position ticks - RED NEON
+    for (int tick = 0; tick <= 10; ++tick)
     {
-        g.setColour(juce::Colours::orange.withAlpha(0.9f));
-        g.setDropShadow(juce::DropShadow(juce::Colours::orange, 15, juce::Point<int>(0,0)));
+        const float angle = juce::degreesToRadians(135.0f + 270.0f * tick / 10.0f);
+        const float outer = diameter * 0.5f + 13.0f;
+        const float inner = outer - (tick % 5 == 0 ? 7.0f : 4.0f);
+        
+        const float x1 = centreX + std::cos(angle) * inner;
+        const float y1 = centreY + std::sin(angle) * inner;
+        const float x2 = centreX + std::cos(angle) * outer;
+        const float y2 = centreY + std::sin(angle) * outer;
+        
+        g.setColour(PremiumColours::neonRed.withAlpha(0.95f));
+        g.drawLine(x1, y1, x2, y2, tick % 5 == 0 ? 2.5f : 1.5f);
+    }
+    
+    // Position indicator - RED NEON
+    const float angle = juce::degreesToRadians(135.0f + 270.0f * proportion);
+    const float indicatorRadius = diameter * 0.35f;
+    
+    g.setColour(juce::Colours::black.withAlpha(0.9f));
+    g.drawLine(
+        centreX,
+        centreY,
+        centreX + std::cos(angle) * indicatorRadius,
+        centreY + std::sin(angle) * indicatorRadius,
+        4.5f
+    );
+    
+    g.setColour(PremiumColours::neonRed);
+    g.drawLine(
+        centreX,
+        centreY,
+        centreX + std::cos(angle) * (indicatorRadius - 2.0f),
+        centreY + std::sin(angle) * (indicatorRadius - 2.0f),
+        3.0f
+    );
+    
+    // Centre cap
+    g.setGradientFill(
+        juce::ColourGradient(
+            juce::Colour(0xff2a2a2a),
+            centreX,
+            centreY - 5.0f,
+            juce::Colour(0xff0a0a0a),
+            centreX,
+            centreY + 5.0f,
+            false
+        )
+    );
+    g.fillEllipse(centreX - 8.0f, centreY - 8.0f, 16.0f, 16.0f);
+    
+    // Label - GOTHIC STYLE
+    g.setFont(juce::Font(14.0f, juce::Font::bold));
+    g.setColour(PremiumColours::ivory);
+    
+    auto labelBounds = bounds;
+    const auto labelArea = labelBounds.removeFromBottom(16.0f).translated(0, -26.0f);
+    g.drawText(labelText, labelArea, juce::Justification::centred);
+}
+
+//==============================================================================
+// FOOTSWITCH IMPLEMENTATION
+//==============================================================================
+
+DistortionFootswitch::DistortionFootswitch()
+    : Button("Distortion Footswitch")
+{
+    setClickingTogglesState(true);
+}
+
+void DistortionFootswitch::paintButton(
+    juce::Graphics& g,
+    bool highlighted,
+    bool down)
+{
+    const auto bounds = getLocalBounds().toFloat();
+    
+    // Housing shadow
+    g.setColour(juce::Colours::black.withAlpha(0.9f));
+    g.fillRoundedRectangle(bounds.translated(2.0f, 5.0f), 13.0f);
+    
+    // Housing chrome
+    g.setGradientFill(
+        juce::ColourGradient(
+            juce::Colour(0xff4a4a4a),
+            bounds.getX(),
+            bounds.getY(),
+            juce::Colour(0xff1a1a1a),
+            bounds.getRight(),
+            bounds.getBottom(),
+            false
+        )
+    );
+    g.fillRoundedRectangle(bounds, 13.0f);
+    
+    // Inner black frame
+    auto inner = bounds.reduced(7.0f);
+    g.setColour(juce::Colour(0xff0a0a0a));
+    g.fillRoundedRectangle(inner, 9.0f);
+    
+    // Button surface
+    auto button = inner.reduced(8.0f);
+    const float shrink = down ? 4.0f : 0.0f;
+    button = button.reduced(shrink);
+    
+    g.setGradientFill(
+        juce::ColourGradient(
+            juce::Colour(0xff3a3a3a),
+            button.getX(),
+            button.getY(),
+            juce::Colour(0xff1a1a1a),
+            button.getRight(),
+            button.getBottom(),
+            false
+        )
+    );
+    g.fillRoundedRectangle(button, 8.0f);
+    
+    // Button highlight
+    g.setColour(juce::Colours::white.withAlpha(0.15f));
+    g.fillRoundedRectangle(
+        button.reduced(3.0f).withHeight(button.getHeight() * 0.3f),
+        6.0f
+    );
+    
+    // LED indicator - RED NEON
+    const float ledSize = 14.0f;
+    const float ledX = bounds.getCentreX() - ledSize * 0.5f;
+    const float ledY = bounds.getBottom() - 28.0f;
+    
+    const bool isOn = getToggleState();
+    
+    if (isOn)
+    {
+        // Glow effect
+        g.setColour(PremiumColours::neonRed.withAlpha(0.3f));
+        g.fillEllipse(ledX - 8.0f, ledY - 8.0f, ledSize + 16.0f, ledSize + 16.0f);
+        
+        // LED body
+        g.setColour(PremiumColours::neonRed);
+        g.fillEllipse(ledX, ledY, ledSize, ledSize);
+        
+        // LED highlight
+        g.setColour(juce::Colours::white.withAlpha(0.6f));
+        g.fillEllipse(ledX + 3.0f, ledY + 2.0f, 4.0f, 4.0f);
     }
     else
     {
-        g.setColour(juce::Colours::darkred);
+        // LED off
+        g.setColour(juce::Colour(0xff3a0a0a));
+        g.fillEllipse(ledX, ledY, ledSize, ledSize);
     }
     
-    g.fillEllipse(ledRect);
-    g.setDropShadow(juce::DropShadow()); // Reset
+    // Label
+    g.setFont(juce::Font(11.0f, juce::Font::bold));
+    g.setColour(PremiumColours::ivory);
+    g.drawText(
+        isOn ? "ON" : "OFF",
+        bounds.removeFromBottom(18.0f),
+        juce::Justification::centred
+    );
 }
 
-void WaveringDistortionModAudioProcessorEditor::PowerFootswitch::mouseDown(const juce::MouseEvent& e)
+//==============================================================================
+// VU METER IMPLEMENTATION
+//==============================================================================
+
+PremiumVUMeter::PremiumVUMeter()
 {
-    isPressed = true;
-    repaint();
+    setOpaque(true);
 }
 
-void WaveringDistortionModAudioProcessorEditor::PowerFootswitch::mouseUp(const juce::MouseEvent& e)
+void PremiumVUMeter::setLevels(float rms, float peak)
 {
-    isPressed = false;
-    // Latching logic
-    float currentState = attachment.parameter->getValue();
-    float newState = currentState > 0.5f ? 0.0f : 1.0f;
-    attachment.setValueAsPartOfGesture(newState);
-    repaint();
+    currentRms = rms;
+    currentPeak = peak;
+    
+    const float targetNeedle = juce::jlimit(0.0f, 1.0f, rms);
+    smoothedNeedle += (targetNeedle - smoothedNeedle) * 0.15f;
+    
+    if (peak > peakPosition)
+        peakPosition = peak;
+    else
+        peakPosition *= 0.995f;
 }
 
-// ==============================================================================
+void PremiumVUMeter::drawScale(
+    juce::Graphics& g,
+    juce::Rectangle<float> bounds)
+{
+    const float centreX = bounds.getCentreX();
+    const float centreY = bounds.getBottom() * 0.83f;
+    const float radius = bounds.getWidth() * 0.40f - 19.0f;
+    
+    // Scale markings - RED NEON
+    for (int i = 0; i <= 20; ++i)
+    {
+        const float angle = juce::degreesToRadians(225.0f + i * 4.5f);
+        const float outer = radius + 2.0f;
+        const float inner = outer - (i % 5 == 0 ? 8.0f : 4.0f);
+        
+        const float x1 = centreX + std::cos(angle) * inner;
+        const float y1 = centreY + std::sin(angle) * inner;
+        const float x2 = centreX + std::cos(angle) * outer;
+        const float y2 = centreY + std::sin(angle) * outer;
+        
+        g.setColour(PremiumColours::neonRed.withAlpha(i % 5 == 0 ? 1.0f : 0.7f));
+        g.drawLine(x1, y1, x2, y2, i % 5 == 0 ? 2.0f : 1.0f);
+        
+        if (i % 5 == 0)
+        {
+            const float labelRadius = radius - 15.0f;
+            const float lx = centreX + std::cos(angle) * labelRadius;
+            const float ly = centreY + std::sin(angle) * labelRadius;
+            
+            g.setFont(juce::Font(9.0f, juce::Font::bold));
+            g.setColour(PremiumColours::ivory);
+            
+            const int value = (i <= 10) ? (i - 10) : (i - 10);
+            g.drawText(
+                juce::String(value),
+                juce::Rectangle<float>(lx - 10.0f, ly - 8.0f, 20.0f, 16.0f),
+                juce::Justification::centred
+            );
+        }
+    }
+}
+
+void PremiumVUMeter::paint(juce::Graphics& g)
+{
+    const auto bounds = getLocalBounds().toFloat();
+    
+    // Housing shadow
+    g.setColour(juce::Colours::black.withAlpha(0.9f));
+    g.fillRoundedRectangle(bounds.translated(2.0f, 5.0f), 13.0f);
+    
+    // Housing chrome
+    g.setGradientFill(
+        juce::ColourGradient(
+            juce::Colour(0xff4a4a4a),
+            bounds.getX(),
+            bounds.getY(),
+            juce::Colour(0xff1a1a1a),
+            bounds.getRight(),
+            bounds.getBottom(),
+            false
+        )
+    );
+    g.fillRoundedRectangle(bounds, 13.0f);
+    
+    // Inner black frame
+    auto inner = bounds.reduced(7.0f);
+    g.setColour(juce::Colour(0xff0a0a0a));
+    g.fillRoundedRectangle(inner, 9.0f);
+    
+    // Red neon display background
+    auto display = inner.reduced(5.0f);
+    g.setGradientFill(
+        juce::ColourGradient(
+            juce::Colour(0xff2a0a0a),
+            display.getX(),
+            display.getY(),
+            juce::Colour(0xff0a0505),
+            display.getX(),
+            display.getBottom(),
+            false
+        )
+    );
+    g.fillRoundedRectangle(display, 6.0f);
+    
+    // Scale
+    drawScale(g, display);
+    
+    const float centreX = display.getCentreX();
+    const float centreY = display.getBottom() * 0.83f;
+    const float radius = display.getWidth() * 0.40f - 19.0f;
+    
+    // Peak marker - RED
+    const float peakAngle = juce::degreesToRadians(225.0f + peakPosition * 90.0f);
+    const float peakX = centreX + std::cos(peakAngle) * radius;
+    const float peakY = centreY + std::sin(peakAngle) * radius;
+    
+    g.setColour(PremiumColours::neonRed);
+    g.fillEllipse(peakX - 3.0f, peakY - 3.0f, 6.0f, 6.0f);
+    
+    // Needle - RED NEON
+    const float needleAngle = juce::degreesToRadians(225.0f + smoothedNeedle * 90.0f);
+    const float needleX = centreX + std::cos(needleAngle) * radius;
+    const float needleY = centreY + std::sin(needleAngle) * radius;
+    
+    g.setColour(juce::Colours::black.withAlpha(0.9f));
+    g.drawLine(centreX + 1.0f, centreY + 2.0f, needleX + 1.0f, needleY + 2.0f, 3.5f);
+    
+    g.setColour(PremiumColours::neonRed);
+    g.drawLine(centreX, centreY, needleX, needleY, 2.5f);
+    
+    // Needle centre
+    g.setColour(juce::Colour(0xff2a2a2a));
+    g.fillEllipse(centreX - 5.0f, centreY - 5.0f, 10.0f, 10.0f);
+    
+    // Glass reflection
+    g.setColour(juce::Colours::white.withAlpha(0.055f));
+    juce::Path reflection;
+    reflection.addTriangle(
+        display.getX(),
+        display.getY(),
+        display.getRight() * 0.7f,
+        display.getY(),
+        display.getX(),
+        display.getBottom() * 0.5f
+    );
+    g.fillPath(reflection);
+    
+    // Meter title - GOTHIC STYLE
+    g.setFont(juce::Font(11.0f, juce::Font::bold));
+    g.setColour(PremiumColours::neonRed);
+    g.drawText(
+        "OUTPUT LEVEL",
+        display.getX(),
+        display.getY() + 5.0f,
+        display.getWidth(),
+        15.0f,
+        juce::Justification::centred
+    );
+    
+    g.setFont(8.0f);
+    g.setColour(PremiumColours::ivory.withAlpha(0.8f));
+    g.drawText(
+        "0 VU = -18 dBFS",
+        display.getX(),
+        display.getBottom() - 17.0f,
+        display.getWidth(),
+        12.0f,
+        juce::Justification::centred
+    );
+}
+
+//==============================================================================
 // MAIN EDITOR IMPLEMENTATION
-// ==============================================================================
+//==============================================================================
 
-WaveringDistortionModAudioProcessorEditor::WaveringDistortionModAudioProcessorEditor (WaveringDistortionModAudioProcessor& p)
-    : AudioProcessorEditor (&p), audioProcessor (p)
+WaveringAudioProcessorEditor::WaveringAudioProcessorEditor(
+    WaveringAudioProcessor& processor)
+    : AudioProcessorEditor(&processor),
+      audioProcessor(processor)
 {
-    // Инициализация компонентов
-    vuMeter = std::make_unique<VUMeterComponent>(audioProcessor);
-    addAndMakeVisible(vuMeter.get());
+    setResizable(false, false);
+    setSize(960, 620);
     
-    // ВАЖНО: Убедитесь, что ID "distortionEnabled" совпадает с вашим PluginProcessor
-    footSwitch = std::make_unique<PowerFootswitch>(audioProcessor.treeState, "distortionEnabled"); 
-    addAndMakeVisible(footSwitch.get());
+    // VU
+    addAndMakeVisible(vuMeter);
     
-    // Knobs (ID должны совпадать с PluginProcessor)
-    knobDrive = std::make_unique<PremiumKnob>(audioProcessor.treeState, "drive", "DRIVE");
-    addAndMakeVisible(knobDrive.get());
+    // Setup knobs with APVTS attachments
+    const auto attachSlider = [this](const juce::String& parameter, MetalKnob& knob)
+    {
+        knob.setRange(0.0, 10.0, 0.01);
+        
+        knob.onValueChange = [this, parameter](float value)
+        {
+            if (auto* param = audioProcessor.apvts.getParameter(parameter))
+                param->setValueNotifyingHost(param->convertTo0to1(value));
+        };
+        
+        // Create slider attachment
+        auto slider = std::make_unique<juce::Slider>();
+        slider->setRange(0.0, 10.0, 0.01);
+        slider->setValue(
+            audioProcessor.apvts.getRawParameterValue(parameter)->load(),
+            juce::dontSendNotification
+        );
+        
+        knob.setValue(static_cast<float>(slider->getValue()));
+        
+        sliderAttachments.push_back(
+            std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+                audioProcessor.apvts,
+                parameter,
+                *slider
+            )
+        );
+        
+        // Sync knob with slider
+        slider->onValueChange = [&knob]()
+        {
+            knob.setValue(static_cast<float>(knob.getValue()));
+        };
+    };
     
-    knobTone = std::make_unique<PremiumKnob>(audioProcessor.treeState, "tone", "TONE");
-    addAndMakeVisible(knobTone.get());
+    attachSlider("drive", driveKnob);
+    attachSlider("tone", toneKnob);
+    attachSlider("bias", biasKnob);
+    attachSlider("body", bodyKnob);
+    attachSlider("mix", mixKnob);
     
-    knobBias = std::make_unique<PremiumKnob>(audioProcessor.treeState, "bias", "BIAS");
-    addAndMakeVisible(knobBias.get());
+    // Footswitch attachment
+    footswitchAttachment = std::make_unique<
+        juce::AudioProcessorValueTreeState::ButtonAttachment
+    >(
+        audioProcessor.apvts,
+        "distortionEnabled",
+        footswitch
+    );
     
-    knobBody = std::make_unique<PremiumKnob>(audioProcessor.treeState, "body", "BODY");
-    addAndMakeVisible(knobBody.get());
+    addAndMakeVisible(driveKnob);
+    addAndMakeVisible(toneKnob);
+    addAndMakeVisible(biasKnob);
+    addAndMakeVisible(bodyKnob);
+    addAndMakeVisible(mixKnob);
+    addAndMakeVisible(footswitch);
     
-    knobMix = std::make_unique<PremiumKnob>(audioProcessor.treeState, "mix", "MIX");
-    addAndMakeVisible(knobMix.get());
-    
-    setSize (960, 620);
-    startTimerHz(60);
+    startTimerHz(50);
 }
 
-WaveringDistortionModAudioProcessorEditor::~WaveringDistortionModAudioProcessorEditor()
+WaveringAudioProcessorEditor::~WaveringAudioProcessorEditor()
 {
     stopTimer();
 }
 
-void WaveringDistortionModAudioProcessorEditor::timerCallback()
+void WaveringAudioProcessorEditor::timerCallback()
 {
-    if (vuMeter)
+    const float rms = audioProcessor.getVuRms();
+    const float peak = audioProcessor.getVuPeak();
+    
+    vuMeter.setLevels(rms, peak);
+    vuMeter.repaint();
+}
+
+//==============================================================================
+// WOOD PANELS
+//==============================================================================
+
+void WaveringAudioProcessorEditor::drawWoodPanels(juce::Graphics& g)
+{
+    const int panelWidth = 66;
+    
+    // Left walnut panel
+    juce::ColourGradient leftWood(
+        PremiumColours::walnutLite,
+        0.0f,
+        0.0f,
+        PremiumColours::walnutDark,
+        static_cast<float>(panelWidth),
+        0.0f,
+        false
+    );
+    g.setGradientFill(leftWood);
+    g.fillRect(0, 0, panelWidth, getHeight());
+    
+    // Right walnut panel
+    juce::ColourGradient rightWood(
+        PremiumColours::walnutDark,
+        static_cast<float>(getWidth() - panelWidth),
+        0.0f,
+        PremiumColours::walnutLite,
+        static_cast<float>(getWidth()),
+        0.0f,
+        false
+    );
+    g.setGradientFill(rightWood);
+    g.fillRect(getWidth() - panelWidth, 0, panelWidth, getHeight());
+    
+    // Wood grain
+    for (int i = 0; i < 30; ++i)
     {
-        float rms = audioProcessor.getRMSLevel();
-        vuMeter->updateLevels(rms, 0.0f);
-        vuMeter->repaint();
+        const float y = static_cast<float>(i * 23);
+        
+        g.setColour(juce::Colours::black.withAlpha(0.12f));
+        g.drawLine(0.0f, y, static_cast<float>(panelWidth), y + 7.0f, 1.0f);
+        g.drawLine(
+            static_cast<float>(getWidth() - panelWidth),
+            y + 5.0f,
+            static_cast<float>(getWidth()),
+            y,
+            1.0f
+        );
+    }
+    
+    // Side panel highlights
+    g.setColour(juce::Colours::white.withAlpha(0.12f));
+    g.drawLine(
+        static_cast<float>(panelWidth - 2),
+        0.0f,
+        static_cast<float>(panelWidth - 2),
+        static_cast<float>(getHeight()),
+        2.0f
+    );
+    g.drawLine(
+        static_cast<float>(getWidth() - panelWidth + 2),
+        0.0f,
+        static_cast<float>(getWidth() - panelWidth + 2),
+        static_cast<float>(getHeight()),
+        2.0f
+    );
+}
+
+//==============================================================================
+// METAL PANEL
+//==============================================================================
+
+void WaveringAudioProcessorEditor::drawMetalPanel(juce::Graphics& g)
+{
+    auto panel = getLocalBounds().toFloat().reduced(66.0f, 14.0f);
+    
+    g.setColour(juce::Colours::black.withAlpha(0.7f));
+    g.fillRoundedRectangle(panel.translated(0.0f, 5.0f), 12.0f);
+    
+    g.setGradientFill(
+        juce::ColourGradient(
+            juce::Colour(0xff2a2a2a),
+            panel.getX(),
+            panel.getY(),
+            juce::Colour(0xff0a0a0a),
+            panel.getRight(),
+            panel.getBottom(),
+            false
+        )
+    );
+    g.fillRoundedRectangle(panel, 12.0f);
+    
+    g.setColour(PremiumColours::metalLight.withAlpha(0.25f));
+    g.drawRoundedRectangle(panel.reduced(1.0f), 12.0f, 1.0f);
+    
+    // Brushed metal lines
+    g.setColour(juce::Colours::white.withAlpha(0.025f));
+    for (int y = 0; y < getHeight(); y += 3)
+    {
+        g.drawLine(
+            panel.getX() + 5.0f,
+            static_cast<float>(y),
+            panel.getRight() - 5.0f,
+            static_cast<float>(y),
+            0.5f
+        );
     }
 }
 
-void WaveringDistortionModAudioProcessorEditor::paint (juce::Graphics& g)
+//==============================================================================
+// GOTHIC ORNAMENTS
+//==============================================================================
+
+void WaveringAudioProcessorEditor::drawGothicOrnaments(juce::Graphics& g)
 {
-    auto bounds = getLocalBounds();
+    const auto bounds = getLocalBounds().toFloat().reduced(66.0f, 14.0f);
     
-    // 1. Деревянные боковины
-    juce::Colour woodDark = juce::Colour::fromRGB(60, 40, 20);
-    juce::Colour woodLight = juce::Colour::fromRGB(100, 70, 40);
-    juce::ColourGradient woodGrad(woodDark, 0, 0, woodLight, bounds.getWidth(), 0, false);
+    // Corner ornaments - RED NEON
+    g.setColour(PremiumColours::neonRed.withAlpha(0.6f));
     
-    g.setGradientFill(woodGrad);
-    g.fillRect(0, 0, 80, bounds.getHeight());
-    g.fillRect(bounds.getWidth() - 80, 0, 80, bounds.getHeight());
+    // Top left
+    g.drawLine(bounds.getX() + 10.0f, bounds.getY() + 10.0f, 
+               bounds.getX() + 40.0f, bounds.getY() + 10.0f, 2.0f);
+    g.drawLine(bounds.getX() + 10.0f, bounds.getY() + 10.0f, 
+               bounds.getX() + 10.0f, bounds.getY() + 40.0f, 2.0f);
     
-    // 2. Основная панель (Черный матовый металл)
-    juce::Rectangle<int> mainPanel = bounds.reduced(80, 20);
-    g.setColour(juce::Colour::fromRGB(25, 25, 30));
-    g.fillRect(mainPanel);
+    // Top right
+    g.drawLine(bounds.getRight() - 10.0f, bounds.getY() + 10.0f, 
+               bounds.getRight() - 40.0f, bounds.getY() + 10.0f, 2.0f);
+    g.drawLine(bounds.getRight() - 10.0f, bounds.getY() + 10.0f, 
+               bounds.getRight() - 10.0f, bounds.getY() + 40.0f, 2.0f);
     
-    // Текстура (шум)
-    g.setColour(juce::Colours::white.withAlpha(0.02f));
-    for (int i = 0; i < mainPanel.getHeight(); i+=2)
+    // Bottom left
+    g.drawLine(bounds.getX() + 10.0f, bounds.getBottom() - 10.0f, 
+               bounds.getX() + 40.0f, bounds.getBottom() - 10.0f, 2.0f);
+    g.drawLine(bounds.getX() + 10.0f, bounds.getBottom() - 10.0f, 
+               bounds.getX() + 10.0f, bounds.getBottom() - 40.0f, 2.0f);
+    
+    // Bottom right
+    g.drawLine(bounds.getRight() - 10.0f, bounds.getBottom() - 10.0f, 
+               bounds.getRight() - 40.0f, bounds.getBottom() - 10.0f, 2.0f);
+    g.drawLine(bounds.getRight() - 10.0f, bounds.getBottom() - 10.0f, 
+               bounds.getRight() - 10.0f, bounds.getBottom() - 40.0f, 2.0f);
+    
+    // Decorative screws - RED NEON accent
+    const float screwSize = 8.0f;
+    const auto drawScrew = [&](float x, float y)
     {
-        g.drawLine(mainPanel.getX(), mainPanel.getY() + i, mainPanel.getRight(), mainPanel.getY() + i, 1.0f);
-    }
+        g.setColour(PremiumColours::metalDark);
+        g.fillEllipse(x - screwSize/2, y - screwSize/2, screwSize, screwSize);
+        g.setColour(PremiumColours::neonRed.withAlpha(0.8f));
+        g.drawLine(x - 3.0f, y, x + 3.0f, y, 1.5f);
+        g.drawLine(x, y - 3.0f, x, y + 3.0f, 1.5f);
+    };
     
-    // 3. Название
-    g.setColour(juce::Colours::silver);
-    g.setFont(juce::Font("Arial Bold", 20.0f, juce::Font::plain));
-    g.drawText("WAVERING DISTORTION MOD", mainPanel.removeFromTop(40), juce::Justification::centred);
+    drawScrew(bounds.getX() + 25.0f, bounds.getY() + 25.0f);
+    drawScrew(bounds.getRight() - 25.0f, bounds.getY() + 25.0f);
+    drawScrew(bounds.getX() + 25.0f, bounds.getBottom() - 25.0f);
+    drawScrew(bounds.getRight() - 25.0f, bounds.getBottom() - 25.0f);
 }
 
-void WaveringDistortionModAudioProcessorEditor::resized()
+//==============================================================================
+// HEADER
+//==============================================================================
+
+void WaveringAudioProcessorEditor::drawHeader(juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().reduced(80, 20);
+    // Title - GOTHIC STYLE
+    g.setFont(juce::Font(25.0f, juce::Font::bold));
+    g.setColour(PremiumColours::ivory);
+    g.drawText(
+        "WAVERING DISTORTION MOD",
+        100,
+        27,
+        getWidth() - 200,
+        35,
+        juce::Justification::centred
+    );
     
-    // VU Meter
-    auto vuArea = bounds.removeFromTop(250).reduced(150, 20);
-    vuMeter->setBounds(vuArea);
+    // Subtitle - RED NEON
+    g.setFont(juce::Font(10.0f, juce::Font::bold));
+    g.setColour(PremiumColours::neonRed);
+    g.drawText(
+        "GOTHIC INDUSTRIAL DISTORTION SYSTEM",
+        100,
+        63,
+        getWidth() - 200,
+        18,
+        juce::Justification::centred
+    );
     
-    // Knobs Row
-    auto knobsArea = bounds.removeFromTop(150);
-    int knobWidth = knobsArea.getWidth() / 5;
+    g.setColour(PremiumColours::metalLight.withAlpha(0.25f));
+    g.drawLine(105.0f, 88.0f, static_cast<float>(getWidth() - 105), 88.0f, 1.0f);
+}
+
+//==============================================================================
+// MAIN PAINT
+//==============================================================================
+
+void WaveringAudioProcessorEditor::paint(juce::Graphics& g)
+{
+    g.fillAll(PremiumColours::black);
     
-    knobDrive->setBounds(knobsArea.removeFromLeft(knobWidth));
-    knobTone->setBounds(knobsArea.removeFromLeft(knobWidth));
-    knobBias->setBounds(knobsArea.removeFromLeft(knobWidth));
-    knobBody->setBounds(knobsArea.removeFromLeft(knobWidth));
-    knobMix->setBounds(knobsArea.removeFromLeft(knobWidth));
+    drawWoodPanels(g);
+    drawMetalPanel(g);
+    drawGothicOrnaments(g);
+    drawHeader(g);
     
-    // Footswitch
-    auto footArea = bounds.removeFromBottom(120).reduced(250, 20);
-    footSwitch->setBounds(footArea);
+    // VU housing label - RED NEON
+    g.setFont(juce::Font(9.0f, juce::Font::bold));
+    g.setColour(PremiumColours::neonRed);
+    g.drawText(
+        "ANALOG OUTPUT METER",
+        300,
+        95,
+        360,
+        14,
+        juce::Justification::centred
+    );
+    
+    // Control panel label - GOTHIC STYLE
+    g.setFont(juce::Font(10.0f, juce::Font::bold));
+    g.setColour(PremiumColours::ivory.withAlpha(0.9f));
+    g.drawText(
+        "DISTORTION CONTROLS",
+        100,
+        330,
+        getWidth() - 200,
+        16,
+        juce::Justification::centred
+    );
+    
+    // Footer - RED NEON
+    g.setFont(9.0f);
+    g.setColour(PremiumColours::neonRed.withAlpha(0.7f));
+    g.drawText(
+        "HUNTERICE / GOTHIC PREMIUM SERIES",
+        100,
+        595,
+        getWidth() - 200,
+        12,
+        juce::Justification::centred
+    );
+}
+
+//==============================================================================
+// RESIZED
+//==============================================================================
+
+void WaveringAudioProcessorEditor::resized()
+{
+    // VU meter
+    vuMeter.setBounds(getWidth() / 2 - 180, 112, 360, 190);
+    
+    // Five distortion controls with numeric input
+    constexpr int knobWidth = 132;
+    constexpr int knobHeight = 180; // Increased height for text box
+    constexpr int gap = 14;
+    constexpr int totalWidth = knobWidth * 5 + gap * 4;
+    const int startX = (getWidth() - totalWidth) / 2;
+    
+    int x = startX;
+    
+    driveKnob.setBounds(x, 350, knobWidth, knobHeight);
+    x += knobWidth + gap;
+    
+    toneKnob.setBounds(x, 350, knobWidth, knobHeight);
+    x += knobWidth + gap;
+    
+    biasKnob.setBounds(x, 350, knobWidth, knobHeight);
+    x += knobWidth + gap;
+    
+    bodyKnob.setBounds(x, 350, knobWidth, knobHeight);
+    x += knobWidth + gap;
+    
+    mixKnob.setBounds(x, 350, knobWidth, knobHeight);
+    
+    // Mechanical footswitch
+    footswitch.setBounds(getWidth() / 2 - 55, 540, 110, 78);
 }
