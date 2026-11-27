@@ -1,89 +1,120 @@
-/*
-  ==============================================================================
-    PluginEditor.h
-  ==============================================================================
-*/
-
 #pragma once
 
-#include <JuceHeader.h>
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_basics/juce_gui_basics.h>
+
 #include "PluginProcessor.h"
 
-class WaveringDistortionModAudioProcessorEditor : public juce::AudioProcessorEditor,
-                                                  private juce::Timer
+//==============================================================================
+// Premium metallic knob
+//==============================================================================
+
+class MetalKnob : public juce::Slider
 {
 public:
-    WaveringDistortionModAudioProcessorEditor (WaveringDistortionModAudioProcessor&);
-    ~WaveringDistortionModAudioProcessorEditor() override;
+    explicit MetalKnob(const juce::String& labelText);
 
-    void paint (juce::Graphics&) override;
-    void resized() override;
-    void timerCallback() override;
+    void paint(juce::Graphics& g) override;
 
 private:
-    WaveringDistortionModAudioProcessor& audioProcessor;
+    juce::String labelText;
+};
 
-    // --- KOMПОНЕНТЫ ИНТЕРФЕЙСА ---
-    
-    // Кастомный компонент для VU-метра
-    class VUMeterComponent : public juce::Component
-    {
-    public:
-        VUMeterComponent(WaveringDistortionModAudioProcessor& proc) : processor(proc) {}
-        
-        void paint(juce::Graphics& g) override;
-        void updateLevels(float newRms, float newPeak);
-        
-    private:
-        WaveringDistortionModAudioProcessor& processor;
-        float currentRms = 0.0f;
-        float currentPeak = 0.0f;
-        float needlePosition = 0.0f; // Для инерции
-    };
+//==============================================================================
+// Mechanical guitar pedal footswitch
+//==============================================================================
 
-    // Кастомный компонент для ручки (Knob)
-    class PremiumKnob : public juce::Component
-    {
-    public:
-        PremiumKnob(juce::AudioProcessorValueTreeState& state, const juce::String& paramID, const juce::String& label);
-        void paint(juce::Graphics& g) override;
-        void mouseDown(const juce::MouseEvent& e) override;
-        void mouseDrag(const juce::MouseEvent& e) override;
-        void mouseUp(const juce::MouseEvent& e) override;
-        
-    private:
-        juce::AudioProcessorValueTreeState::ParameterAttachment attachment;
-        juce::String parameterLabel;
-        bool isDragging = false;
-        float lastY = 0.0f;
-    };
+class DistortionFootswitch : public juce::Button
+{
+public:
+    DistortionFootswitch();
 
-    // Кастомный компонент для Footswitch
-    class PowerFootswitch : public juce::Component
-    {
-    public:
-        PowerFootswitch(juce::AudioProcessorValueTreeState& state, const juce::String& paramID);
-        void paint(juce::Graphics& g) override;
-        void mouseDown(const juce::MouseEvent& e) override;
-        void mouseUp(const juce::MouseEvent& e) override;
-        
-    private:
-        juce::AudioProcessorValueTreeState::ParameterAttachment attachment;
-        bool isPressed = false;
-        bool ledOn = false;
-    };
+    void paintButton(
+        juce::Graphics& g,
+        bool highlighted,
+        bool down
+    ) override;
+};
 
-    // Указатели на компоненты
-    std::unique_ptr<VUMeterComponent> vuMeter;
-    std::unique_ptr<PowerFootswitch> footSwitch;
-    
-    std::unique_ptr<PremiumKnob> knobDrive;
-    std::unique_ptr<PremiumKnob> knobTone;
-    std::unique_ptr<PremiumKnob> knobBias;
-    std::unique_ptr<PremiumKnob> knobBody;
-    std::unique_ptr<PremiumKnob> knobMix;
+//==============================================================================
+// Analog VU meter
+//==============================================================================
 
-    juce::Font titleFont;
+class PremiumVUMeter : public juce::Component
+{
+public:
+    PremiumVUMeter();
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringDistortionModAudioProcessorEditor)
+    void setLevels(float rms, float peak);
+
+    void paint(juce::Graphics& g) override;
+
+private:
+    float currentRms = 0.0f;
+    float currentPeak = 0.0f;
+
+    float smoothedNeedle = 0.0f;
+    float peakPosition = 0.0f;
+
+    void drawScale(
+        juce::Graphics& g,
+        juce::Rectangle<float> bounds
+    );
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PremiumVUMeter)
+};
+
+//==============================================================================
+// Main editor
+//==============================================================================
+
+class WaveringAudioProcessorEditor
+    : public juce::AudioProcessorEditor,
+      private juce::Timer
+{
+public:
+    explicit WaveringAudioProcessorEditor(
+        WaveringAudioProcessor& processor
+    );
+
+    ~WaveringAudioProcessorEditor() override;
+
+    void paint(juce::Graphics& g) override;
+
+    void resized() override;
+
+private:
+    WaveringAudioProcessor& audioProcessor;
+
+    void timerCallback() override;
+
+    void drawWoodPanels(juce::Graphics& g);
+
+    void drawMetalPanel(juce::Graphics& g);
+
+    void drawHeader(juce::Graphics& g);
+
+    PremiumVUMeter vuMeter;
+
+    MetalKnob driveKnob { "DRIVE" };
+    MetalKnob toneKnob { "TONE" };
+    MetalKnob biasKnob { "BIAS" };
+    MetalKnob bodyKnob { "BODY" };
+    MetalKnob mixKnob { "MIX" };
+
+    DistortionFootswitch footswitch;
+
+    std::vector<
+        std::unique_ptr<
+            juce::AudioProcessorValueTreeState::SliderAttachment
+        >
+    > sliderAttachments;
+
+    std::unique_ptr<
+        juce::AudioProcessorValueTreeState::ButtonAttachment
+    > footswitchAttachment;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(
+        WaveringAudioProcessorEditor
+    )
 };
