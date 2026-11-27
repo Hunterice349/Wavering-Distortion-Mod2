@@ -1,157 +1,40 @@
-#include "DistortionDSP.h"
 #pragma once
-#include "DistortionDSP.h"
-#include <juce_audio_processors/juce_audio_processors.h>
-#include "DistortionDSP.h"
-#include "WaveguideDSP.h"
-#include "RingModulatorDSP.h"
-#include "SpectralDelayDSP.h"
 
-class WaveringAudioProcessor : public juce::AudioProcessor
-{
+#include <JuceHeader.h>
+#include "DistortionDSP.h" // Подключаем наш исправленный DSP
+
+class WaveringDistortionModAudioProcessor : public juce::AudioProcessor {
 public:
-    WaveringAudioProcessor();
-    ~WaveringAudioProcessor() override = default;
+    WaveringDistortionModAudioProcessor();
+    ~WaveringDistortionModAudioProcessor() override;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
-
-    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
-
-    void processBlock (
-        juce::AudioBuffer<float>&,
-        juce::MidiBuffer&
-    ) override;
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override;
 
-    bool hasEditor() const override
-    {
-        return true;
-    }
-
-    const juce::String getName() const override
-    {
-        return JucePlugin_Name;
-    }
-
-    bool acceptsMidi() const override
-    {
-        return false;
-    }
-
-    bool producesMidi() const override
-    {
-        return false;
-    }
-
-    bool isMidiEffect() const override
-    {
-        return false;
-    }
-
+    const juce::String getName() const override;
+    bool acceptsMidi() const override;
+    bool producesMidi() const override;
     double getTailLengthSeconds() const override;
+    int getNumPrograms() override;
+    int getCurrentProgram() override;
+    void setCurrentProgram (int index) override;
+    const juce::String getProgramName (int index) override;
+    void changeProgramName (int index, const juce::String& newName) override;
+    void getStateInformation (juce::MemoryBlock& destData) override;
+    void setStateInformation (const void* data, int sizeInBytes) override;
 
-    //==============================================================
-    // Program management
-    //==============================================================
-
-    int getNumPrograms() override
-    {
-        return 1;
-    }
-
-    int getCurrentProgram() override
-    {
-        return 0;
-    }
-
-    void setCurrentProgram (int index) override
-    {
-        juce::ignoreUnused (index);
-    }
-
-    const juce::String getProgramName (int index) override
-    {
-        return index == 0 ? juce::String ("Default") : juce::String{};
-    }
-
-    void changeProgramName (
-        int index,
-        const juce::String& newName
-    ) override
-    {
-        juce::ignoreUnused (index, newName);
-    }
-
-    //==============================================================
-    // State management
-    //==============================================================
-
-    void getStateInformation (
-        juce::MemoryBlock& destData
-    ) override;
-
-    void setStateInformation (
-        const void* data,
-        int sizeInBytes
-    ) override;
-
-    //==============================================================
-    // Parameters
-    //==============================================================
-
-    static juce::AudioProcessorValueTreeState::ParameterLayout
-    createParameterLayout();
-
-    juce::AudioProcessorValueTreeState apvts {
-        *this,
-        nullptr,
-        "Parameters",
-        createParameterLayout()
-    };
+    // Параметры
+    juce::AudioParameterFloat* driveParam = nullptr;
+    juce::AudioParameterFloat* toneParam = nullptr;
+    juce::AudioParameterFloat* mixParam = nullptr;
+    juce::AudioParameterFloat* bodyParam = nullptr;
 
 private:
-
-    //==============================================================
-    // DSP modules
-    //==============================================================
-
-    DistortionDSP distortion;
-
-    WaveguideDSP waveguide;
-
-    RingModulatorDSP ringModulator;
-
-    SpectralDelayDSP spectralDelay;
-
-    //==============================================================
-    // Audio configuration
-    //==============================================================
-
-    double currentSampleRate = 44100.0;
-
-    //==============================================================
-    // Parameter readers
-    //==============================================================
-
-    DistortionDSP::Parameters
-    readDistortionParameters() const noexcept;
-
-    WaveguideDSP::Parameters
-    readWaveguideParameters() const noexcept;
-
-    RingModulatorDSP::Parameters
-    readRingModulatorParameters() const noexcept;
-
-    SpectralDelayDSP::Parameters
-    readSpectralDelayParameters() const noexcept;
-
-    //==============================================================
-    // JUCE safeguards
-    //==============================================================
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (
-        WaveringAudioProcessor
-    )
+    DistortionDSP distortionDSP; // Экземпляр нашего процессора
+    
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringDistortionModAudioProcessor)
 };
