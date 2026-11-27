@@ -21,13 +21,13 @@ void WaveringAudioProcessorEditor::GothicLookAndFeel::drawRotarySlider (
     auto fill = neonRed;
     auto indicator = bloodRed;
 
-    auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (1.0f);
+    auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (2.0f);
     auto radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) / 2.0f;
     auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
     auto lineW = juce::jmax (2.0f, radius * 0.08f);
     auto arcRadius = radius - lineW * 2.0f;
 
-    // 1. Draw Base (Dark Graphite/Metal)
+    // 1. Базовая дорожка (Темный графит)
     juce::Path backgroundArc;
     backgroundArc.addCentredArc (bounds.getCentreX(), bounds.getCentreY(),
                                  arcRadius, arcRadius, 0.0f,
@@ -35,7 +35,7 @@ void WaveringAudioProcessorEditor::GothicLookAndFeel::drawRotarySlider (
     g.setColour (outline);
     g.strokePath (backgroundArc, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    // 2. Draw Active Arc (Neon Red Glow)
+    // 2. Активная дуга (Неоновое красное свечение)
     if (slider.isEnabled())
     {
         juce::Path valueArc;
@@ -43,37 +43,51 @@ void WaveringAudioProcessorEditor::GothicLookAndFeel::drawRotarySlider (
                                 arcRadius, arcRadius, 0.0f,
                                 rotaryStartAngle, toAngle, true);
         
-        // Neon Glow Effect
-        g.setColour (fill.withAlpha (0.3f));
-        g.strokePath (valueArc, juce::PathStrokeType (lineW + 4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        // Внешнее свечение
+        g.setColour (fill.withAlpha (0.2f));
+        g.strokePath (valueArc, juce::PathStrokeType (lineW + 6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         
+        // Внутреннее свечение
+        g.setColour (fill.withAlpha (0.6f));
+        g.strokePath (valueArc, juce::PathStrokeType (lineW + 2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        
+        // Основная линия
         g.setColour (fill);
         g.strokePath (valueArc, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
-    // 3. Draw Knob Body (Photorealistic Metal Simulation)
-    juce::Point<float> thumbPoint (bounds.getCentreX() + arcRadius * std::cos (toAngle - juce::MathConstants<float>::halfPi),
-                                   bounds.getCentreY() + arcRadius * std::sin (toAngle - juce::MathConstants<float>::halfPi));
-
+    // 3. Тело ручки (Фотореалистичный шлифованный металл)
     juce::Path knobCircle;
-    knobCircle.addEllipse (bounds.reduced (radius * 0.4f));
+    knobCircle.addEllipse (bounds.reduced (radius * 0.35f));
     
-    // Metallic Gradient
-    juce::ColourGradient grad (juce::Colours::white.withAlpha(0.1f), bounds.getCentreX(), bounds.getY(),
-                               juce::Colours::black.withAlpha(0.5f), bounds.getCentreX(), bounds.getBottom(), false);
+    // Металлический градиент (сверху вниз)
+    juce::ColourGradient grad (juce::Colours::white.withAlpha(0.15f), bounds.getCentreX(), bounds.getY(),
+                               juce::Colours::black.withAlpha(0.6f), bounds.getCentreX(), bounds.getBottom(), false);
     g.setGradientFill (grad);
     g.fillPath (knobCircle);
     
-    // Border
+    // Металлическая окантовка
     g.setColour (steel);
     g.strokePath (knobCircle, juce::PathStrokeType (1.0f));
 
-    // 4. Indicator Line (Crimson Neon)
+    // 4. Индикатор положения (Кроваво-красная неоновая линия)
+    juce::Point<float> thumbPoint (bounds.getCentreX() + arcRadius * std::cos (toAngle - juce::MathConstants<float>::halfPi),
+                                   bounds.getCentreY() + arcRadius * std::sin (toAngle - juce::MathConstants<float>::halfPi));
+
     juce::Path indicatorLine;
     indicatorLine.startNewSubPath (bounds.getCentre());
     indicatorLine.lineTo (thumbPoint);
-    g.setColour (indicator);
+    
+    // Свечение индикатора
+    g.setColour (indicator.withAlpha(0.5f));
+    g.strokePath (indicatorLine, juce::PathStrokeType (4.0f));
+    // Ядро индикатора
+    g.setColour (neonRed);
     g.strokePath (indicatorLine, juce::PathStrokeType (2.0f));
+    
+    // Центральная точка
+    g.setColour (neonRed);
+    g.fillEllipse (bounds.getCentreX() - 2, bounds.getCentreY() - 2, 4, 4);
 }
 
 juce::Font WaveringAudioProcessorEditor::GothicLookAndFeel::getLabelFont (juce::Label& label)
@@ -92,7 +106,7 @@ void WaveringAudioProcessorEditor::GothicLookAndFeel::drawLabel (juce::Graphics&
         g.setFont (getLabelFont (label));
         g.drawText (label.getText(), area, label.getJustificationType(), true);
         
-        // Draw subtle border for input field
+        // Тонкая рамка для поля ввода
         g.setColour (steel);
         g.drawRect (area, 1.0f);
     }
@@ -105,35 +119,38 @@ void WaveringAudioProcessorEditor::GothicLookAndFeel::drawLabel (juce::Graphics&
 WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcessor& p)
     : AudioProcessorEditor (&p)
 {
-    // Set LookAndFeel
     setLookAndFeel (&gothicLF);
     setOpaque (true);
 
+    // Лямбда для быстрой настройки всех ручек
+    auto setupKnob = [this] (PremiumKnob& knob) {
+        knob.setColour (juce::Slider::textBoxTextColourId, gothicLF.textSilver);
+        knob.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        knob.setColour (juce::Slider::rotarySliderFillColourId, gothicLF.neonRed);
+        knob.setColour (juce::Slider::rotarySliderOutlineColourId, gothicLF.graphite);
+        knob.setLookAndFeel (&gothicLF);
+    };
+
     // --- Distortion Section ---
-    addAndMakeVisible (driveKnob);
+    addAndMakeVisible (driveKnob); setupKnob(driveKnob);
     driveAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "drive", driveKnob));
-    addAndMakeVisible (driveLbl);
-    driveLbl.setText ("DRIVE", juce::dontSendNotification);
+    addAndMakeVisible (driveLbl); driveLbl.setText ("DRIVE", juce::dontSendNotification);
 
-    addAndMakeVisible (toneKnob);
+    addAndMakeVisible (toneKnob); setupKnob(toneKnob);
     toneAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "tone", toneKnob));
-    addAndMakeVisible (toneLbl);
-    toneLbl.setText ("TONE", juce::dontSendNotification);
+    addAndMakeVisible (toneLbl); toneLbl.setText ("TONE", juce::dontSendNotification);
 
-    addAndMakeVisible (biasKnob);
+    addAndMakeVisible (biasKnob); setupKnob(biasKnob);
     biasAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "bias", biasKnob));
-    addAndMakeVisible (biasLbl);
-    biasLbl.setText ("BIAS", juce::dontSendNotification);
+    addAndMakeVisible (biasLbl); biasLbl.setText ("BIAS", juce::dontSendNotification);
 
-    addAndMakeVisible (bodyKnob);
+    addAndMakeVisible (bodyKnob); setupKnob(bodyKnob);
     bodyAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "body", bodyKnob));
-    addAndMakeVisible (bodyLbl);
-    bodyLbl.setText ("BODY", juce::dontSendNotification);
+    addAndMakeVisible (bodyLbl); bodyLbl.setText ("BODY", juce::dontSendNotification);
 
-    addAndMakeVisible (mixKnob);
+    addAndMakeVisible (mixKnob); setupKnob(mixKnob);
     mixAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "mix", mixKnob));
-    addAndMakeVisible (mixLbl);
-    mixLbl.setText ("MIX", juce::dontSendNotification);
+    addAndMakeVisible (mixLbl); mixLbl.setText ("MIX", juce::dontSendNotification);
 
     addAndMakeVisible (distOnBtn);
     distOnBtn.setButtonText ("DISTORTION ON");
@@ -141,35 +158,29 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     distOnAtt.reset (new juce::AudioProcessorValueTreeState::ButtonAttachment (p.apvts, "distortionEnabled", distOnBtn));
 
     // --- Waveguide Section ---
-    addAndMakeVisible (rateKnob);
+    addAndMakeVisible (rateKnob); setupKnob(rateKnob);
     rateAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveRate", rateKnob));
-    addAndMakeVisible (rateLbl);
-    rateLbl.setText ("RATE", juce::dontSendNotification);
+    addAndMakeVisible (rateLbl); rateLbl.setText ("RATE", juce::dontSendNotification);
 
-    addAndMakeVisible (resKnob);
+    addAndMakeVisible (resKnob); setupKnob(resKnob);
     resAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveResonance", resKnob));
-    addAndMakeVisible (resLbl);
-    resLbl.setText ("RESONANCE", juce::dontSendNotification);
+    addAndMakeVisible (resLbl); resLbl.setText ("RESONANCE", juce::dontSendNotification);
 
-    addAndMakeVisible (fbKnob);
+    addAndMakeVisible (fbKnob); setupKnob(fbKnob);
     fbAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveFeedback", fbKnob));
-    addAndMakeVisible (fbLbl);
-    fbLbl.setText ("FEEDBACK", juce::dontSendNotification);
+    addAndMakeVisible (fbLbl); fbLbl.setText ("FEEDBACK", juce::dontSendNotification);
 
-    addAndMakeVisible (dampKnob);
+    addAndMakeVisible (dampKnob); setupKnob(dampKnob);
     dampAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveDamping", dampKnob));
-    addAndMakeVisible (dampLbl);
-    dampLbl.setText ("DAMPING", juce::dontSendNotification);
+    addAndMakeVisible (dampLbl); dampLbl.setText ("DAMPING", juce::dontSendNotification);
 
-    addAndMakeVisible (charKnob);
+    addAndMakeVisible (charKnob); setupKnob(charKnob);
     charAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveCharacter", charKnob));
-    addAndMakeVisible (charLbl);
-    charLbl.setText ("CHARACTER", juce::dontSendNotification);
+    addAndMakeVisible (charLbl); charLbl.setText ("CHARACTER", juce::dontSendNotification);
 
-    addAndMakeVisible (waveMixKnob);
+    addAndMakeVisible (waveMixKnob); setupKnob(waveMixKnob);
     waveMixAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveMix", waveMixKnob));
-    addAndMakeVisible (waveMixLbl);
-    waveMixLbl.setText ("WAVE MIX", juce::dontSendNotification);
+    addAndMakeVisible (waveMixLbl); waveMixLbl.setText ("WAVE MIX", juce::dontSendNotification);
 
     addAndMakeVisible (waveOnBtn);
     waveOnBtn.setButtonText ("WAVEGUIDE ON");
@@ -179,10 +190,10 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcess
     // --- Title ---
     addAndMakeVisible (titleLbl);
     titleLbl.setText ("WAVERING DISTORTION MOD2", juce::dontSendNotification);
-    titleLbl.setFont (juce::Font ("Courier New", 24.0f, juce::Font::bold));
+    titleLbl.setFont (juce::Font ("Courier New", 22.0f, juce::Font::bold));
     titleLbl.setColour (juce::Label::textColourId, gothicLF.neonRed);
 
-    setSize (900, 500);
+    setSize (900, 520);
     startTimerHz (30);
 }
 
@@ -193,36 +204,33 @@ WaveringAudioProcessorEditor::~WaveringAudioProcessorEditor()
 
 void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    // 1. Background: Deep Black/Graphite Gradient
+    // 1. Фон: Глубокий черно-графитовый градиент
     juce::ColourGradient bgGrad (gothicLF.bgBlack, 0, 0,
                                  gothicLF.graphite, 0, (float) getHeight(), false);
     g.setFillType (bgGrad);
     g.fillAll();
 
-    // 2. Panel Backgrounds (Metallic Plates)
+    // 2. Металлические панели модулей
     auto drawPanel = [&g, &gothicLF] (juce::Rectangle<int> bounds, const juce::String& title)
     {
-        // Plate Gradient
         juce::ColourGradient plateGrad (gothicLF.steel, bounds.getX(), bounds.getY(),
                                         gothicLF.graphite, bounds.getX(), bounds.getBottom(), false);
         g.setGradientFill (plateGrad);
         g.fillRoundedRectangle (bounds.toFloat(), 10.0f);
         
-        // Border
-        g.setColour (gothicLF.bloodRed.withAlpha(0.5f));
+        // Красная неоновая окантовка
+        g.setColour (gothicLF.bloodRed.withAlpha(0.6f));
         g.drawRoundedRectangle (bounds.toFloat(), 10.0f, 2.0f);
         
-        // Inner Shadow/Bevel
-        g.setColour (juce::Colours::black.withAlpha(0.3f));
+        // Внутренняя тень для эффекта углубления
+        g.setColour (juce::Colours::black.withAlpha(0.4f));
         g.drawRoundedRectangle (bounds.reduced(2).toFloat(), 10.0f, 1.0f);
     };
 
-    // Distortion Panel
     drawPanel (distortionArea, "DISTORTION MODULE");
-    // Waveguide Panel
     drawPanel (waveguideArea, "WAVEGUIDE MODULE");
 
-    // 3. Screws (Decorative)
+    // 3. Декоративные винты по углам корпуса
     auto drawScrew = [&g] (int x, int y)
     {
         g.setColour (juce::Colours::darkgrey);
@@ -231,26 +239,25 @@ void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
         g.fillEllipse (x-2, y-2, 4, 4);
     };
     
-    drawScrew (10, 10);
-    drawScrew (getWidth()-10, 10);
-    drawScrew (10, getHeight()-10);
-    drawScrew (getWidth()-10, getHeight()-10);
+    drawScrew (12, 12);
+    drawScrew (getWidth()-12, 12);
+    drawScrew (12, getHeight()-12);
+    drawScrew (getWidth()-12, getHeight()-12);
 }
 
 void WaveringAudioProcessorEditor::resized()
 {
-    // Layout Constants
     const int panelMargin = 20;
     const int knobSize = 70;
     const int labelHeight = 20;
     const int btnHeight = 30;
     
-    // Define Panels
+    // Разделение на две панели
     distortionArea = getLocalBounds().removeFromLeft (getWidth() / 2).reduced (panelMargin);
     waveguideArea = getLocalBounds().reduced (panelMargin);
     
-    // Title
-    titleLbl.setBounds (getLocalBounds().removeFromTop (40));
+    // Заголовок
+    titleLbl.setBounds (getLocalBounds().removeFromTop (50).withTrimmedLeft(20));
 
     // --- Distortion Layout ---
     auto distRow = distortionArea.removeFromTop (knobSize + labelHeight + 10);
@@ -296,5 +303,5 @@ void WaveringAudioProcessorEditor::resized()
 
 void WaveringAudioProcessorEditor::timerCallback()
 {
-    // Optional: Add subtle pulsing to neon elements if desired
+    // Можно добавить легкую пульсацию неона, если потребуется
 }
