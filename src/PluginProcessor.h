@@ -1,7 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "DistortionDSP.h" // Подключаем наш исправленный DSP
+#include "DistortionDSP.h" // <-- ВАЖНО: Замена старого заголовка
 
 class WaveringDistortionModAudioProcessor : public juce::AudioProcessor {
 public:
@@ -27,14 +27,14 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-    // Параметры
+    // Объявление параметров
     juce::AudioParameterFloat* driveParam = nullptr;
     juce::AudioParameterFloat* toneParam = nullptr;
     juce::AudioParameterFloat* mixParam = nullptr;
     juce::AudioParameterFloat* bodyParam = nullptr;
 
 private:
-    DistortionDSP distortionDSP; // Экземпляр нашего процессора
+    DistortionDSP distortionDSP; // Экземпляр нашего DSP
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringDistortionModAudioProcessor)
 };
