@@ -1,3 +1,4 @@
+
 #include "PluginEditor.h"
 
 #include <cmath>
@@ -77,7 +78,11 @@ void MetalKnob::paint(juce::Graphics& g)
 
     const float proportion =
         static_cast<float>(
-            juce::jlimit(0.0, 1.0, getNormalisedValue())
+            juce::jlimit(
+                0.0,
+                1.0,
+                valueToProportionOfLength(getValue())
+            )
         );
 
     // Shadow.
@@ -442,9 +447,15 @@ void DistortionFootswitch::paintButton(
             : PremiumColours::metalLight
     );
 
+    // IMPORTANT: bounds is const. Work on a mutable copy.
+    auto labelBounds = bounds;
+
+    const auto labelArea =
+        labelBounds.removeFromBottom(16.0f);
+
     g.drawText(
         enabled ? "EFFECT ON" : "EFFECT OFF",
-        bounds.removeFromBottom(16.0f),
+        labelArea,
         juce::Justification::centred
     );
 }
@@ -833,17 +844,17 @@ WaveringAudioProcessorEditor::WaveringAudioProcessorEditor(
     const auto attachSlider =
         [this](const juce::String& parameter,
                juce::Slider& slider)
-    {
-        sliderAttachments.push_back(
-            std::make_unique<
-                juce::AudioProcessorValueTreeState::SliderAttachment
-            >(
-                audioProcessor.apvts,
-                parameter,
-                slider
-            )
-        );
-    };
+        {
+            sliderAttachments.push_back(
+                std::make_unique<
+                    juce::AudioProcessorValueTreeState::SliderAttachment
+                >(
+                    audioProcessor.apvts,
+                    parameter,
+                    slider
+                )
+            );
+        };
 
     attachSlider("drive", driveKnob);
     attachSlider("tone", toneKnob);
