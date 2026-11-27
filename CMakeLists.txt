@@ -18,15 +18,13 @@ juce_add_plugin(WaveringDistortionMod
     COPY_PLUGIN_AFTER_BUILD TRUE)
 
 target_sources(WaveringDistortionMod PRIVATE
-    src/DistortionDSP.cpp
-    src/DistortionDSP.h
-    src/WaveguideDSP.cpp
-    src/WaveguideDSP.h
     src/PluginProcessor.cpp
-    src/PluginProcessor.h
     src/PluginEditor.cpp
-    src/PluginEditor.h)
-
+    src/DistortionDSP.cpp  # <--- ОБЯЗАТЕЛЬНО ДОБАВЬТЕ ЭТО
+    src/PluginProcessor.h
+    src/PluginEditor.h
+    src/DistortionDSP.h    # <--- И ЭТО
+)
 target_compile_definitions(WaveringDistortionMod PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
