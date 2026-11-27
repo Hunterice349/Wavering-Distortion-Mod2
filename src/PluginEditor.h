@@ -1,124 +1,93 @@
-
 #pragma once
 
-#include <juce_audio_processors/juce_audio_processors.h>
-#include <juce_gui_basics/juce_gui_basics.h>
-
-#include <memory>
-#include <vector>
-
+#include <JuceHeader.h>
 #include "PluginProcessor.h"
 
-//==============================================================================
-// Premium metallic knob
-//==============================================================================
-
-class MetalKnob : public juce::Slider
+class WaveringAudioProcessorEditor : public juce::AudioProcessorEditor
 {
 public:
-    explicit MetalKnob(const juce::String& labelText);
-
-    void paint(juce::Graphics& g) override;
-
-private:
-    juce::String labelText;
-};
-
-//==============================================================================
-// Mechanical guitar pedal footswitch
-//==============================================================================
-
-class DistortionFootswitch : public juce::Button
-{
-public:
-    DistortionFootswitch();
-
-    void paintButton(
-        juce::Graphics& g,
-        bool highlighted,
-        bool down
-    ) override;
-};
-
-//==============================================================================
-// Analog VU meter
-//==============================================================================
-
-class PremiumVUMeter : public juce::Component
-{
-public:
-    PremiumVUMeter();
-
-    void setLevels(float rms, float peak);
-
-    void paint(juce::Graphics& g) override;
-
-private:
-    float currentRms = 0.0f;
-    float currentPeak = 0.0f;
-
-    float smoothedNeedle = 0.0f;
-    float peakPosition = 0.0f;
-
-    void drawScale(
-        juce::Graphics& g,
-        juce::Rectangle<float> bounds
-    );
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PremiumVUMeter)
-};
-
-//==============================================================================
-// Main editor
-//==============================================================================
-
-class WaveringAudioProcessorEditor
-    : public juce::AudioProcessorEditor,
-      private juce::Timer
-{
-public:
-    explicit WaveringAudioProcessorEditor(
-        WaveringAudioProcessor& processor
-    );
-
+    WaveringAudioProcessorEditor (WaveringAudioProcessor&);
     ~WaveringAudioProcessorEditor() override;
 
-    void paint(juce::Graphics& g) override;
-
+    void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
-    WaveringAudioProcessor& audioProcessor;
+    // --- Premium Gothic LookAndFeel ---
+    class GothicLookAndFeel : public juce::LookAndFeel_V4
+    {
+    public:
+        GothicLookAndFeel();
 
-    void timerCallback() override;
+        void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height, float sliderPos,
+                               const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider&) override;
+        
+        juce::Font getLabelFont (juce::Label&) override;
+        void drawLabel (juce::Graphics&, juce::Label&) override;
+        void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& backgroundColour,
+                                   bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
 
-    void drawWoodPanels(juce::Graphics& g);
+        // Palette
+        const juce::Colour bgBlack      = juce::Colour (0xff050505);
+        const juce::Colour graphite     = juce::Colour (0xff1a1a1a);
+        const juce::Colour steel        = juce::Colour (0xff2a2a2a);
+        const juce::Colour neonRed      = juce::Colour (0xffff0033);
+        const juce::Colour bloodRed     = juce::Colour (0xff8a0000);
+        const juce::Colour textSilver   = juce::Colour (0xffcccccc);
+    };
 
-    void drawMetalPanel(juce::Graphics& g);
+    GothicLookAndFeel gothicLF;
 
-    void drawHeader(juce::Graphics& g);
+    // --- Custom Knob Component with Numerical Entry ---
+    struct PremiumKnob : public juce::Slider
+    {
+        PremiumKnob()
+        {
+            setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+            setTextBoxStyle (juce::Slider::TextBoxBelow, false, 70, 24);
+            setColour (juce::Slider::textBoxTextColourId, gothicLF.textSilver);
+            setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+            setColour (juce::Slider::rotarySliderFillColourId, gothicLF.neonRed);
+            setColour (juce::Slider::rotarySliderOutlineColourId, gothicLF.graphite);
+            setLookAndFeel (&gothicLF);
+            setDoubleClickReturnValue (true, 0.0); // Double click to reset
+        }
+        ~PremiumKnob() override { setLookAndFeel (nullptr); }
+    };
 
-    PremiumVUMeter vuMeter;
+    struct GothicLabel : public juce::Label
+    {
+        GothicLabel()
+        {
+            setJustificationType (juce::Justification::centred);
+            setColour (juce::Label::textColourId, gothicLF.textSilver);
+            setFont (juce::Font ("Courier New", 11.0f, juce::Font::bold));
+        }
+    };
 
-    MetalKnob driveKnob { "DRIVE" };
-    MetalKnob toneKnob { "TONE" };
-    MetalKnob biasKnob { "BIAS" };
-    MetalKnob bodyKnob { "BODY" };
-    MetalKnob mixKnob { "MIX" };
+    // --- Attachments ---
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+        driveAtt, toneAtt, biasAtt, bodyAtt, mixAtt,
+        rateAtt, resAtt, fbAtt, dampAtt, charAtt, waveMixAtt;
 
-    DistortionFootswitch footswitch;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+        distOnAtt, waveOnAtt;
 
-    std::vector<
-        std::unique_ptr<
-            juce::AudioProcessorValueTreeState::SliderAttachment
-        >
-    > sliderAttachments;
+    // --- Controls: Distortion ---
+    PremiumKnob driveKnob, toneKnob, biasKnob, bodyKnob, mixKnob;
+    GothicLabel driveLbl, toneLbl, biasLbl, bodyLbl, mixLbl;
+    juce::TextButton distOnBtn;
 
-    std::unique_ptr<
-        juce::AudioProcessorValueTreeState::ButtonAttachment
-    > footswitchAttachment;
+    // --- Controls: Waveguide ---
+    PremiumKnob rateKnob, resKnob, fbKnob, dampKnob, charKnob, waveMixKnob;
+    GothicLabel rateLbl, resLbl, fbLbl, dampLbl, charLbl, waveMixLbl;
+    juce::TextButton waveOnBtn;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(
-        WaveringAudioProcessorEditor
-    )
+    // --- Title ---
+    GothicLabel titleLbl;
+
+    // --- Layout Areas ---
+    juce::Rectangle<int> distortionArea, waveguideArea;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringAudioProcessorEditor)
 };
