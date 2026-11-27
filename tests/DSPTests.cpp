@@ -1,12 +1,12 @@
 #include <JuceHeader.h>
 #include "../src/DistortionDSP.h"
-#include <fstream> // Исправление ошибки: 'ofstream' is not a member of 'std'
+#include <fstream> // Важно для ofstream
 
+// Тест 1: Проверка экстремальных значений
 void testParameterExtremes() {
     DistortionDSP dsp;
     dsp.prepareToPlay(44100.0, 512);
     
-    // Тестируем экстремальные значения
     dsp.drive = 1.0f;
     dsp.tone = 0.0f;
     dsp.mix = 1.0f;
@@ -16,7 +16,6 @@ void testParameterExtremes() {
     buffer.clear();
     juce::MidiBuffer midi;
     
-    // Заполняем тестовым сигналом
     for (int i = 0; i < 512; ++i) {
         buffer.setSample(0, i, 0.5f);
         buffer.setSample(1, i, 0.5f);
@@ -24,7 +23,6 @@ void testParameterExtremes() {
     
     dsp.processBlock(buffer, midi);
     
-    // Проверка на отсутствие NaN и Inf
     for (int ch = 0; ch < 2; ++ch) {
         for (int s = 0; s < 512; ++s) {
             jassert(!std::isnan(buffer.getSample(ch, s)));
@@ -33,5 +31,5 @@ void testParameterExtremes() {
     }
 }
 
-// Убедитесь, что все остальные тестовые функции в этом файле имеют 
-// правильные сигнатуры (возвращаемый тип void, круглые скобки и точку с запятой).
+// Если есть другие тесты, убедитесь, что они имеют такую же структуру:
+// void testName() { ... }
