@@ -4,8 +4,6 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "DistortionDSP.h"
 #include "WaveguideDSP.h"
-#include "RingModulatorDSP.h"
-#include "SpectralDelayDSP.h"
 
 class WaveringAudioProcessor : public juce::AudioProcessor
 {
@@ -52,10 +50,6 @@ public:
 
     double getTailLengthSeconds() const override;
 
-    //==============================================================
-    // Program management
-    //==============================================================
-
     int getNumPrograms() override
     {
         return 1;
@@ -84,10 +78,6 @@ public:
         juce::ignoreUnused (index, newName);
     }
 
-    //==============================================================
-    // State management
-    //==============================================================
-
     void getStateInformation (
         juce::MemoryBlock& destData
     ) override;
@@ -96,10 +86,6 @@ public:
         const void* data,
         int sizeInBytes
     ) override;
-
-    //==============================================================
-    // Parameters
-    //==============================================================
 
     static juce::AudioProcessorValueTreeState::ParameterLayout
     createParameterLayout();
@@ -112,44 +98,16 @@ public:
     };
 
 private:
-
-    //==============================================================
-    // DSP modules
-    //==============================================================
-
     DistortionDSP distortion;
-
     WaveguideDSP waveguide;
 
-    RingModulatorDSP ringModulator;
-
-    SpectralDelayDSP spectralDelay;
-
-    //==============================================================
-    // Audio configuration
-    //==============================================================
-
     double currentSampleRate = 44100.0;
-
-    //==============================================================
-    // Parameter readers
-    //==============================================================
 
     DistortionDSP::Parameters
     readDistortionParameters() const noexcept;
 
     WaveguideDSP::Parameters
     readWaveguideParameters() const noexcept;
-
-    RingModulatorDSP::Parameters
-    readRingModulatorParameters() const noexcept;
-
-    SpectralDelayDSP::Parameters
-    readSpectralDelayParameters() const noexcept;
-
-    //==============================================================
-    // JUCE safeguards
-    //==============================================================
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (
         WaveringAudioProcessor
