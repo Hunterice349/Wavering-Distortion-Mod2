@@ -1,115 +1,162 @@
-
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 WaveringAudioProcessor::WaveringAudioProcessor()
     : AudioProcessor (BusesProperties()
 #if ! JucePlugin_IsMidiEffect
 #if ! JucePlugin_IsSynth
-        .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
+        .withInput ("Input", juce::AudioChannelSet::stereo(), true)
 #endif
         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
 #endif
-    ),
-    apvts (*this, nullptr, "Parameters", createParameterLayout())
+    )
 {
 }
-
-WaveringAudioProcessor::~WaveringAudioProcessor() = default;
 
 juce::AudioProcessorValueTreeState::ParameterLayout
 WaveringAudioProcessor::createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
+    // DISTORTION
+
     layout.add (std::make_unique<juce::AudioParameterFloat>(
-        "DISTORTION_DRIVE",
-        "Distortion Drive",
+        "drive", "Drive",
         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
         0.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
-        "DISTORTION_TONE",
-        "Distortion Tone",
+        "tone", "Tone",
         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
         5.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
-        "DISTORTION_MIX",
-        "Distortion Mix",
+        "bias", "Bias",
+        juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
+        5.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat>(
+        "body", "Body",
+        juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
+        5.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat>(
+        "mix", "Mix",
         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
         10.0f));
 
     layout.add (std::make_unique<juce::AudioParameterBool>(
-        "DISTORTION_ENABLED",
-        "Distortion Enabled",
-        false));
+        "distortionEnabled", "Distortion Enabled",
+        true));
+
+    // WAVEGUIDE
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
-        "WAVEGUIDE_RATE",
-        "Waveguide Rate",
+        "waveRate", "Waveguide Rate",
         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
         5.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
-        "WAVEGUIDE_RESONANCE",
-        "Waveguide Resonance",
+        "waveResonance", "Waveguide Resonance",
         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
         5.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
-        "WAVEGUIDE_FEEDBACK",
-        "Waveguide Feedback",
+        "waveFeedback", "Waveguide Feedback",
         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
         4.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
-        "WAVEGUIDE_DAMPING",
-        "Waveguide Damping",
+        "waveDamping", "Waveguide Damping",
         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
         5.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
-        "WAVEGUIDE_CHARACTER",
-        "Waveguide Character",
+        "waveCharacter", "Waveguide Character",
         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
         0.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
-        "WAVEGUIDE_MIX",
-        "Waveguide Mix",
+        "waveMix", "Waveguide Mix",
         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f),
         0.0f));
 
     layout.add (std::make_unique<juce::AudioParameterBool>(
-        "WAVEGUIDE_ENABLED",
-        "Waveguide Enabled",
+        "waveguideEnabled", "Waveguide Enabled",
         false));
 
     return layout;
 }
 
+//==============================================================================
+
 void WaveringAudioProcessor::prepareToPlay (
     double sampleRate,
     int samplesPerBlock)
 {
+    juce::ignoreUnused (samplesPerBlock);
+
     currentSampleRate =
-        std::isfinite (sampleRate) && sampleRate > 1.0
-            ? sampleRate
+        std::isfinite (sampleRate) && sampleRate > 1000.0
+            ? std::clamp (sampleRate, 8000.0, 384000.0)
             : 44100.0;
 
-    distortion.prepare (currentSampleRate, samplesPerBlock);
-    waveguide.prepare (currentSampleRate, samplesPerBlock);
+    const auto distortionParameters = readDistortionParameters();
+    const auto waveguideParameters = readWaveguideParameters();
+
+    distortion.prepare (
+        currentSampleRate,
+        distortionParameters);
+
+    waveguide.prepare (
+        currentSampleRate,
+        waveguideParameters);
 }
+
+//==============================================================================
 
 void WaveringAudioProcessor::releaseResources()
 {
     distortion.reset();
     waveguide.reset();
 }
+
+//==============================================================================
+
+bool WaveringAudioProcessor::isBusesLayoutSupported (
+    const BusesLayout& layouts) const
+{
+#if JucePlugin_IsMidiEffect
+
+    juce::ignoreUnused (layouts);
+    return true;
+
+#else
+
+    const auto outputChannels =
+        layouts.getMainOutputChannelSet();
+
+    if (outputChannels != juce::AudioChannelSet::mono()
+        && outputChannels != juce::AudioChannelSet::stereo())
+        return false;
+
+#if ! JucePlugin_IsSynth
+
+    if (outputChannels != layouts.getMainInputChannelSet())
+        return false;
+
+#endif
+
+    return true;
+
+#endif
+}
+
+//==============================================================================
 
 double WaveringAudioProcessor::getTailLengthSeconds() const
 {
@@ -152,6 +199,8 @@ double WaveringAudioProcessor::getTailLengthSeconds() const
         : 30.0;
 }
 
+//==============================================================================
+
 void WaveringAudioProcessor::processBlock (
     juce::AudioBuffer<float>& buffer,
     juce::MidiBuffer& midiMessages)
@@ -166,40 +215,55 @@ void WaveringAudioProcessor::processBlock (
     if (numChannels <= 0 || numSamples <= 0)
         return;
 
+    const bool stereo = numChannels > 1;
+
     const auto distortionParameters = readDistortionParameters();
     const auto waveguideParameters = readWaveguideParameters();
 
+    distortion.setParameters (distortionParameters);
+    waveguide.setParameters (waveguideParameters);
+
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        float left = buffer.getSample (0, sample);
-        float right = numChannels > 1
+        const float inputLeft =
+            buffer.getSample (0, sample);
+
+        const float inputRight = stereo
             ? buffer.getSample (1, sample)
-            : left;
+            : inputLeft;
+
+        float distortionLeft = 0.0f;
+        float distortionRight = 0.0f;
 
         distortion.processFrame (
-            left,
-            right,
-            distortionParameters);
+            inputLeft,
+            inputRight,
+            stereo,
+            distortionLeft,
+            distortionRight);
+
+        float outputLeft = 0.0f;
+        float outputRight = 0.0f;
 
         waveguide.processFrame (
-            left,
-            right,
-            waveguideParameters);
+            distortionLeft,
+            distortionRight,
+            stereo,
+            outputLeft,
+            outputRight);
 
-        buffer.setSample (0, sample, left);
+        buffer.setSample (0, sample, outputLeft);
 
-        if (numChannels > 1)
-            buffer.setSample (1, sample, right);
+        if (stereo)
+            buffer.setSample (1, sample, outputRight);
     }
 
+    // Clear any unexpected additional output channels.
     for (int channel = 2; channel < numChannels; ++channel)
-    {
-        auto* channelData = buffer.getWritePointer (channel);
-
-        for (int sample = 0; sample < numSamples; ++sample)
-            channelData[sample] = 0.0f;
-    }
+        buffer.clear (channel, 0, numSamples);
 }
+
+//==============================================================================
 
 juce::AudioProcessorEditor*
 WaveringAudioProcessor::createEditor()
@@ -207,86 +271,21 @@ WaveringAudioProcessor::createEditor()
     return new WaveringAudioProcessorEditor (*this);
 }
 
-bool WaveringAudioProcessor::hasEditor() const
-{
-    return true;
-}
-
-const juce::String WaveringAudioProcessor::getName() const
-{
-    return JucePlugin_Name;
-}
-
-bool WaveringAudioProcessor::acceptsMidi() const
-{
-#if JucePlugin_WantsMidiInput
-    return true;
-#else
-    return false;
-#endif
-}
-
-bool WaveringAudioProcessor::producesMidi() const
-{
-#if JucePlugin_ProducesMidiOutput
-    return true;
-#else
-    return false;
-#endif
-}
-
-bool WaveringAudioProcessor::isMidiEffect() const
-{
-#if JucePlugin_IsMidiEffect
-    return true;
-#else
-    return false;
-#endif
-}
-
-double WaveringAudioProcessor::getProgramLengthInSeconds() const
-{
-    return 0.0;
-}
-
-int WaveringAudioProcessor::getNumPrograms()
-{
-    return 1;
-}
-
-int WaveringAudioProcessor::getCurrentProgram()
-{
-    return 0;
-}
-
-void WaveringAudioProcessor::setCurrentProgram (int index)
-{
-    juce::ignoreUnused (index);
-}
-
-const juce::String WaveringAudioProcessor::getProgramName (int index)
-{
-    juce::ignoreUnused (index);
-    return {};
-}
-
-void WaveringAudioProcessor::changeProgramName (
-    int index,
-    const juce::String& newName)
-{
-    juce::ignoreUnused (index, newName);
-}
+//==============================================================================
 
 void WaveringAudioProcessor::getStateInformation (
     juce::MemoryBlock& destData)
 {
-    auto state = apvts.copyState();
+    const auto state = apvts.copyState();
 
     std::unique_ptr<juce::XmlElement> xml (
         state.createXml());
 
-    copyXmlToBinary (*xml, destData);
+    if (xml != nullptr)
+        copyXmlToBinary (*xml, destData);
 }
+
+//==============================================================================
 
 void WaveringAudioProcessor::setStateInformation (
     const void* data,
@@ -303,54 +302,66 @@ void WaveringAudioProcessor::setStateInformation (
     }
 }
 
-WaveringAudioProcessor::DistortionParameters
-WaveringAudioProcessor::readDistortionParameters() const
+//==============================================================================
+
+DistortionDSP::Parameters
+WaveringAudioProcessor::readDistortionParameters() const noexcept
 {
-    DistortionParameters parameters;
+    DistortionDSP::Parameters parameters;
 
     parameters.drive =
-        apvts.getRawParameterValue ("DISTORTION_DRIVE")->load();
+        apvts.getRawParameterValue ("drive")->load();
 
     parameters.tone =
-        apvts.getRawParameterValue ("DISTORTION_TONE")->load();
+        apvts.getRawParameterValue ("tone")->load();
+
+    parameters.bias =
+        apvts.getRawParameterValue ("bias")->load();
+
+    parameters.body =
+        apvts.getRawParameterValue ("body")->load();
 
     parameters.mix =
-        apvts.getRawParameterValue ("DISTORTION_MIX")->load();
+        apvts.getRawParameterValue ("mix")->load();
 
     parameters.enabled =
-        apvts.getRawParameterValue ("DISTORTION_ENABLED")->load() > 0.5f;
+        apvts.getRawParameterValue ("distortionEnabled")->load() > 0.5f;
 
     return parameters;
 }
 
+//==============================================================================
+
 WaveguideDSP::Parameters
-WaveringAudioProcessor::readWaveguideParameters() const
+WaveringAudioProcessor::readWaveguideParameters() const noexcept
 {
     WaveguideDSP::Parameters parameters;
 
     parameters.rate =
-        apvts.getRawParameterValue ("WAVEGUIDE_RATE")->load();
+        apvts.getRawParameterValue ("waveRate")->load();
 
     parameters.resonance =
-        apvts.getRawParameterValue ("WAVEGUIDE_RESONANCE")->load();
+        apvts.getRawParameterValue ("waveResonance")->load();
 
     parameters.feedback =
-        apvts.getRawParameterValue ("WAVEGUIDE_FEEDBACK")->load();
+        apvts.getRawParameterValue ("waveFeedback")->load();
 
     parameters.damping =
-        apvts.getRawParameterValue ("WAVEGUIDE_DAMPING")->load();
+        apvts.getRawParameterValue ("waveDamping")->load();
 
     parameters.character =
-        apvts.getRawParameterValue ("WAVEGUIDE_CHARACTER")->load();
+        apvts.getRawParameterValue ("waveCharacter")->load();
 
     parameters.mix =
-        apvts.getRawParameterValue ("WAVEGUIDE_MIX")->load();
+        apvts.getRawParameterValue ("waveMix")->load();
 
     parameters.enabled =
-        apvts.getRawParameterValue ("WAVEGUIDE_ENABLED")->load() > 0.5f;
+        apvts.getRawParameterValue ("waveguideEnabled")->load() > 0.5f;
 
     return parameters;
 }
+
+//==============================================================================
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
