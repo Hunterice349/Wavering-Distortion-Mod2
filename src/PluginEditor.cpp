@@ -1,622 +1,300 @@
-
 #include "PluginEditor.h"
+#include "PluginProcessor.h"
 
-#include <cmath>
+//==============================================================================
+// GothicLookAndFeel Implementation
+//==============================================================================
 
-namespace
+WaveringAudioProcessorEditor::GothicLookAndFeel::GothicLookAndFeel()
 {
-    constexpr auto backgroundColour = juce::Colour::fromRGB(10, 10, 13);
-    constexpr auto panelColour      = juce::Colour::fromRGB(20, 20, 25);
-    constexpr auto redColour        = juce::Colour::fromRGB(235, 24, 48);
-    constexpr auto darkRedColour    = juce::Colour::fromRGB(95, 8, 20);
-    constexpr auto silverColour     = juce::Colour::fromRGB(155, 160, 170);
-    constexpr auto textColour       = juce::Colour::fromRGB(220, 220, 225);
-
-    constexpr float pi = 3.14159265358979323846f;
+    setColour (juce::TextButton::buttonColourId, graphite);
+    setColour (juce::TextButton::buttonOnColourId, neonRed);
+    setColour (juce::TextButton::textColourOnId, bgBlack);
+    setColour (juce::TextButton::textColourOffId, textSilver);
 }
 
-//==============================================================
-// LOOK AND FEEL
-//==============================================================
-
-WaveringLookAndFeel::WaveringLookAndFeel()
+void WaveringAudioProcessorEditor::GothicLookAndFeel::drawRotarySlider (
+    juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
+    const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider& slider)
 {
-    setColour(juce::Slider::textBoxTextColourId, textColour);
-    setColour(juce::Slider::textBoxBackgroundColourId,
-              juce::Colour::fromRGB(12, 12, 16));
-    setColour(juce::Slider::textBoxOutlineColourId,
-              juce::Colour::fromRGB(75, 75, 85));
+    auto outline = graphite;
+    auto fill = neonRed;
+    auto indicator = bloodRed;
 
-    setColour(juce::TextButton::buttonColourId,
-              juce::Colour::fromRGB(25, 25, 31));
-    setColour(juce::TextButton::buttonOnColourId, darkRedColour);
-    setColour(juce::TextButton::textColourOffId, silverColour);
-    setColour(juce::TextButton::textColourOnId, juce::Colours::white);
-}
+    auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (1.0f);
+    auto radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) / 2.0f;
+    auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+    auto lineW = juce::jmax (2.0f, radius * 0.08f);
+    auto arcRadius = radius - lineW * 2.0f;
 
-void WaveringLookAndFeel::drawRotarySlider(
-    juce::Graphics& g,
-    int x, int y, int width, int height,
-    float sliderPos,
-    float rotaryStartAngle,
-    float rotaryEndAngle,
-    juce::Slider& slider)
-{
-    juce::ignoreUnused(slider);
-
-    const float size = static_cast<float>(
-        juce::jmin(width, height) - 12);
-
-    const float centreX = static_cast<float>(x) + width * 0.5f;
-    const float centreY = static_cast<float>(y) + height * 0.5f - 5.0f;
-
-    const float radius = size * 0.5f;
-    const float angle = rotaryStartAngle
-        + sliderPos * (rotaryEndAngle - rotaryStartAngle);
-
-    const auto centre = juce::Point<float>(centreX, centreY);
-
-    // Shadow beneath the knob.
-    g.setColour(juce::Colours::black.withAlpha(0.85f));
-    g.fillEllipse(centreX - radius + 2.0f,
-                  centreY - radius + 7.0f,
-                  size, size);
-
-    // Outer metal housing.
-    juce::ColourGradient outerGradient(
-        juce::Colour::fromRGB(115, 118, 126),
-        centreX, centreY - radius,
-        juce::Colour::fromRGB(22, 23, 29),
-        centreX, centreY + radius,
-        false);
-
-    g.setGradientFill(outerGradient);
-    g.fillEllipse(centreX - radius,
-                  centreY - radius,
-                  size, size);
-
-    // Outer bevel.
-    g.setColour(juce::Colour::fromRGB(190, 192, 200)
-                    .withAlpha(0.65f));
-    g.drawEllipse(centreX - radius,
-                  centreY - radius,
-                  size, size, 1.4f);
-
-    // Inner dark ring.
-    const float innerRadius = radius * 0.88f;
-
-    g.setColour(juce::Colour::fromRGB(8, 8, 12));
-    g.fillEllipse(centreX - innerRadius,
-                  centreY - innerRadius,
-                  innerRadius * 2.0f,
-                  innerRadius * 2.0f);
-
-    // Red illuminated position arc.
+    // 1. Draw Base (Dark Graphite/Metal)
     juce::Path backgroundArc;
-    backgroundArc.addCentredArc(
-        centreX, centreY,
-        radius * 0.96f, radius * 0.96f,
-        0.0f,
-        rotaryStartAngle,
-        rotaryEndAngle,
-        true);
+    backgroundArc.addCentredArc (bounds.getCentreX(), bounds.getCentreY(),
+                                 arcRadius, arcRadius, 0.0f,
+                                 rotaryStartAngle, rotaryEndAngle, true);
+    g.setColour (outline);
+    g.strokePath (backgroundArc, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    g.setColour(darkRedColour.withAlpha(0.9f));
-    g.strokePath(backgroundArc,
-        juce::PathStrokeType(3.0f));
-
-    juce::Path activeArc;
-    activeArc.addCentredArc(
-        centreX, centreY,
-        radius * 0.96f, radius * 0.96f,
-        0.0f,
-        rotaryStartAngle,
-        angle,
-        true);
-
-    // Neon glow.
-    g.setColour(redColour.withAlpha(0.17f));
-    g.strokePath(activeArc,
-        juce::PathStrokeType(9.0f));
-
-    g.setColour(redColour.withAlpha(0.95f));
-    g.strokePath(activeArc,
-        juce::PathStrokeType(2.8f));
-
-    // Metallic knob face.
-    const float faceRadius = radius * 0.76f;
-
-    juce::ColourGradient faceGradient(
-        juce::Colour::fromRGB(92, 94, 103),
-        centreX - faceRadius * 0.4f,
-        centreY - faceRadius,
-        juce::Colour::fromRGB(24, 25, 31),
-        centreX + faceRadius * 0.5f,
-        centreY + faceRadius,
-        false);
-
-    g.setGradientFill(faceGradient);
-    g.fillEllipse(centreX - faceRadius,
-                  centreY - faceRadius,
-                  faceRadius * 2.0f,
-                  faceRadius * 2.0f);
-
-    // Fine metallic rim.
-    g.setColour(juce::Colour::fromRGB(145, 148, 157)
-                    .withAlpha(0.75f));
-    g.drawEllipse(centreX - faceRadius,
-                  centreY - faceRadius,
-                  faceRadius * 2.0f,
-                  faceRadius * 2.0f,
-                  1.0f);
-
-    // Radial grip notches.
-    const int notchCount = 32;
-
-    for (int i = 0; i < notchCount; ++i)
+    // 2. Draw Active Arc (Neon Red Glow)
+    if (slider.isEnabled())
     {
-        const float notchAngle =
-            (2.0f * pi * static_cast<float>(i))
-            / static_cast<float>(notchCount);
-
-        const float outer = radius * 0.84f;
-        const float inner = radius * 0.77f;
-
-        const juce::Point<float> p1(
-            centreX + std::sin(notchAngle) * inner,
-            centreY - std::cos(notchAngle) * inner);
-
-        const juce::Point<float> p2(
-            centreX + std::sin(notchAngle) * outer,
-            centreY - std::cos(notchAngle) * outer);
-
-        g.setColour(
-            i % 4 == 0
-                ? silverColour.withAlpha(0.8f)
-                : juce::Colours::black.withAlpha(0.85f));
-
-        g.drawLine(p1.x, p1.y, p2.x, p2.y,
-                   i % 4 == 0 ? 1.5f : 1.0f);
+        juce::Path valueArc;
+        valueArc.addCentredArc (bounds.getCentreX(), bounds.getCentreY(),
+                                arcRadius, arcRadius, 0.0f,
+                                rotaryStartAngle, toAngle, true);
+        
+        // Neon Glow Effect
+        g.setColour (fill.withAlpha (0.3f));
+        g.strokePath (valueArc, juce::PathStrokeType (lineW + 4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        
+        g.setColour (fill);
+        g.strokePath (valueArc, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
-    // Central cap.
-    const float capRadius = radius * 0.25f;
+    // 3. Draw Knob Body (Photorealistic Metal Simulation)
+    juce::Point<float> thumbPoint (bounds.getCentreX() + arcRadius * std::cos (toAngle - juce::MathConstants<float>::halfPi),
+                                   bounds.getCentreY() + arcRadius * std::sin (toAngle - juce::MathConstants<float>::halfPi));
 
-    juce::ColourGradient capGradient(
-        juce::Colour::fromRGB(115, 117, 125),
-        centreX, centreY - capRadius,
-        juce::Colour::fromRGB(28, 29, 35),
-        centreX, centreY + capRadius,
-        false);
+    juce::Path knobCircle;
+    knobCircle.addEllipse (bounds.reduced (radius * 0.4f));
+    
+    // Metallic Gradient
+    juce::ColourGradient grad (juce::Colours::white.withAlpha(0.1f), bounds.getCentreX(), bounds.getY(),
+                               juce::Colours::black.withAlpha(0.5f), bounds.getCentreX(), bounds.getBottom(), false);
+    g.setGradientFill (grad);
+    g.fillPath (knobCircle);
+    
+    // Border
+    g.setColour (steel);
+    g.strokePath (knobCircle, juce::PathStrokeType (1.0f));
 
-    g.setGradientFill(capGradient);
-    g.fillEllipse(centreX - capRadius,
-                  centreY - capRadius,
-                  capRadius * 2.0f,
-                  capRadius * 2.0f);
-
-    g.setColour(silverColour.withAlpha(0.7f));
-    g.drawEllipse(centreX - capRadius,
-                  centreY - capRadius,
-                  capRadius * 2.0f,
-                  capRadius * 2.0f,
-                  1.0f);
-
-    // Red position indicator.
-    const float indicatorLength = radius * 0.52f;
-
-    const juce::Point<float> indicatorEnd(
-        centreX + std::sin(angle) * indicatorLength,
-        centreY - std::cos(angle) * indicatorLength);
-
-    g.setColour(redColour.withAlpha(0.25f));
-    g.drawLine(centreX, centreY,
-               indicatorEnd.x, indicatorEnd.y, 6.0f);
-
-    g.setColour(redColour);
-    g.drawLine(centreX, centreY,
-               indicatorEnd.x, indicatorEnd.y, 2.0f);
-
-    g.setColour(juce::Colours::white.withAlpha(0.9f));
-    g.fillEllipse(indicatorEnd.x - 2.0f,
-                  indicatorEnd.y - 2.0f,
-                  4.0f, 4.0f);
+    // 4. Indicator Line (Crimson Neon)
+    juce::Path indicatorLine;
+    indicatorLine.startNewSubPath (bounds.getCentre());
+    indicatorLine.lineTo (thumbPoint);
+    g.setColour (indicator);
+    g.strokePath (indicatorLine, juce::PathStrokeType (2.0f));
 }
 
-//==============================================================
-// EDITOR CONSTRUCTOR
-//==============================================================
-
-WaveringAudioProcessorEditor::WaveringAudioProcessorEditor(
-    WaveringAudioProcessor& processor)
-    : juce::AudioProcessorEditor(&processor),
-      audioProcessor(processor)
+juce::Font WaveringAudioProcessorEditor::GothicLookAndFeel::getLabelFont (juce::Label& label)
 {
-    setLookAndFeel(&lookAndFeel);
+    return juce::Font ("Courier New", 14.0f, juce::Font::bold);
+}
 
-    setSize(1100, 700);
-    setResizable(true, true);
-    setResizeLimits(850, 570, 1600, 1000);
+void WaveringAudioProcessorEditor::GothicLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
+{
+    g.fillAll (label.findColour (juce::Label::backgroundColourId));
 
-    for (int i = 0; i < parameterCount; ++i)
-        setupSlider(i);
+    if (! label.isBeingEdited())
+    {
+        auto area = label.getLocalBounds().reduced (2);
+        g.setColour (label.findColour (juce::Label::textColourId));
+        g.setFont (getLabelFont (label));
+        g.drawText (label.getText(), area, label.getJustificationType(), true);
+        
+        // Draw subtle border for input field
+        g.setColour (steel);
+        g.drawRect (area, 1.0f);
+    }
+}
 
-    distortionButton.setClickingTogglesState(true);
-    waveguideButton.setClickingTogglesState(true);
+//==============================================================================
+// Editor Implementation
+//==============================================================================
 
-    distortionButton.setColour(
-        juce::TextButton::buttonColourId,
-        juce::Colour::fromRGB(35, 18, 24));
+WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcessor& p)
+    : AudioProcessorEditor (&p)
+{
+    // Set LookAndFeel
+    setLookAndFeel (&gothicLF);
+    setOpaque (true);
 
-    waveguideButton.setColour(
-        juce::TextButton::buttonColourId,
-        juce::Colour::fromRGB(35, 18, 24));
+    // --- Distortion Section ---
+    addAndMakeVisible (driveKnob);
+    driveAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "drive", driveKnob));
+    addAndMakeVisible (driveLbl);
+    driveLbl.setText ("DRIVE", juce::dontSendNotification);
 
-    distortionButton.setColour(
-        juce::TextButton::buttonOnColourId, darkRedColour);
+    addAndMakeVisible (toneKnob);
+    toneAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "tone", toneKnob));
+    addAndMakeVisible (toneLbl);
+    toneLbl.setText ("TONE", juce::dontSendNotification);
 
-    waveguideButton.setColour(
-        juce::TextButton::buttonOnColourId, darkRedColour);
+    addAndMakeVisible (biasKnob);
+    biasAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "bias", biasKnob));
+    addAndMakeVisible (biasLbl);
+    biasLbl.setText ("BIAS", juce::dontSendNotification);
 
-    distortionButton.setColour(
-        juce::TextButton::textColourOffId, textColour);
+    addAndMakeVisible (bodyKnob);
+    bodyAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "body", bodyKnob));
+    addAndMakeVisible (bodyLbl);
+    bodyLbl.setText ("BODY", juce::dontSendNotification);
 
-    waveguideButton.setColour(
-        juce::TextButton::textColourOffId, textColour);
+    addAndMakeVisible (mixKnob);
+    mixAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "mix", mixKnob));
+    addAndMakeVisible (mixLbl);
+    mixLbl.setText ("MIX", juce::dontSendNotification);
 
-    distortionButton.setColour(
-        juce::TextButton::textColourOnId, juce::Colours::white);
+    addAndMakeVisible (distOnBtn);
+    distOnBtn.setButtonText ("DISTORTION ON");
+    distOnBtn.setClickingTogglesState (true);
+    distOnAtt.reset (new juce::AudioProcessorValueTreeState::ButtonAttachment (p.apvts, "distortionEnabled", distOnBtn));
 
-    waveguideButton.setColour(
-        juce::TextButton::textColourOnId, juce::Colours::white);
+    // --- Waveguide Section ---
+    addAndMakeVisible (rateKnob);
+    rateAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveRate", rateKnob));
+    addAndMakeVisible (rateLbl);
+    rateLbl.setText ("RATE", juce::dontSendNotification);
 
-    addAndMakeVisible(distortionButton);
-    addAndMakeVisible(waveguideButton);
+    addAndMakeVisible (resKnob);
+    resAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveResonance", resKnob));
+    addAndMakeVisible (resLbl);
+    resLbl.setText ("RESONANCE", juce::dontSendNotification);
 
-    distortionAttachment =
-        std::make_unique<
-            juce::AudioProcessorValueTreeState::ButtonAttachment>(
-                audioProcessor.apvts,
-                "distortionEnabled",
-                distortionButton);
+    addAndMakeVisible (fbKnob);
+    fbAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveFeedback", fbKnob));
+    addAndMakeVisible (fbLbl);
+    fbLbl.setText ("FEEDBACK", juce::dontSendNotification);
 
-    waveguideAttachment =
-        std::make_unique<
-            juce::AudioProcessorValueTreeState::ButtonAttachment>(
-                audioProcessor.apvts,
-                "waveguideEnabled",
-                waveguideButton);
+    addAndMakeVisible (dampKnob);
+    dampAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveDamping", dampKnob));
+    addAndMakeVisible (dampLbl);
+    dampLbl.setText ("DAMPING", juce::dontSendNotification);
 
-    setOpaque(true);
+    addAndMakeVisible (charKnob);
+    charAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveCharacter", charKnob));
+    addAndMakeVisible (charLbl);
+    charLbl.setText ("CHARACTER", juce::dontSendNotification);
+
+    addAndMakeVisible (waveMixKnob);
+    waveMixAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveMix", waveMixKnob));
+    addAndMakeVisible (waveMixLbl);
+    waveMixLbl.setText ("WAVE MIX", juce::dontSendNotification);
+
+    addAndMakeVisible (waveOnBtn);
+    waveOnBtn.setButtonText ("WAVEGUIDE ON");
+    waveOnBtn.setClickingTogglesState (true);
+    waveOnAtt.reset (new juce::AudioProcessorValueTreeState::ButtonAttachment (p.apvts, "waveguideEnabled", waveOnBtn));
+
+    // --- Title ---
+    addAndMakeVisible (titleLbl);
+    titleLbl.setText ("WAVERING DISTORTION MOD2", juce::dontSendNotification);
+    titleLbl.setFont (juce::Font ("Courier New", 24.0f, juce::Font::bold));
+    titleLbl.setColour (juce::Label::textColourId, gothicLF.neonRed);
+
+    setSize (900, 500);
+    startTimerHz (30);
 }
 
 WaveringAudioProcessorEditor::~WaveringAudioProcessorEditor()
 {
-    setLookAndFeel(nullptr);
+    setLookAndFeel (nullptr);
 }
 
-//==============================================================
-// SLIDER SETUP
-//==============================================================
-
-void WaveringAudioProcessorEditor::setupSlider(int index)
+void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    auto& slider = sliders[static_cast<size_t>(index)];
-    auto& label = labels[static_cast<size_t>(index)];
-
-    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-
-    // Editable numerical value below the knob.
-    slider.setTextBoxStyle(
-        juce::Slider::TextBoxBelow,
-        false,
-        76,
-        23);
-
-    slider.setDoubleClickReturnValue(true, 5.0);
-
-    slider.setColour(
-        juce::Slider::textBoxTextColourId, textColour);
-
-    slider.setColour(
-        juce::Slider::textBoxBackgroundColourId,
-        juce::Colour::fromRGB(12, 12, 16));
-
-    slider.setColour(
-        juce::Slider::textBoxOutlineColourId,
-        juce::Colour::fromRGB(75, 75, 85));
-
-    slider.setColour(
-        juce::Slider::textBoxHighlightColourId,
-        darkRedColour);
-
-    slider.setTooltip(parameterNames[static_cast<size_t>(index)]);
-
-    addAndMakeVisible(slider);
-
-    label.setText(
-        parameterNames[static_cast<size_t>(index)],
-        juce::dontSendNotification);
-
-    label.setJustificationType(juce::Justification::centred);
-
-    label.setColour(
-        juce::Label::textColourId,
-        juce::Colour::fromRGB(205, 205, 212));
-
-    label.setFont(juce::Font(13.0f, juce::Font::bold));
-
-    addAndMakeVisible(label);
-
-    attachments.push_back(
-        std::make_unique<
-            juce::AudioProcessorValueTreeState::SliderAttachment>(
-                audioProcessor.apvts,
-                parameterIDs[static_cast<size_t>(index)],
-                slider));
-}
-
-//==============================================================
-// PANEL DRAWING
-//==============================================================
-
-void WaveringAudioProcessorEditor::drawPanel(
-    juce::Graphics& g,
-    juce::Rectangle<float> area,
-    const juce::String& title)
-{
-    // Panel shadow.
-    g.setColour(juce::Colours::black.withAlpha(0.8f));
-    g.fillRoundedRectangle(
-        area.translated(0.0f, 5.0f), 12.0f);
-
-    // Main panel surface.
-    juce::ColourGradient panelGradient(
-        juce::Colour::fromRGB(29, 29, 36),
-        area.getX(), area.getY(),
-        panelColour,
-        area.getX(), area.getBottom(),
-        false);
-
-    g.setGradientFill(panelGradient);
-    g.fillRoundedRectangle(area, 12.0f);
-
-    // Outer metal edge.
-    g.setColour(
-        juce::Colour::fromRGB(85, 85, 95).withAlpha(0.55f));
-
-    g.drawRoundedRectangle(area, 12.0f, 1.0f);
-
-    // Inner top reflection.
-    g.setColour(
-        juce::Colours::white.withAlpha(0.045f));
-
-    g.drawLine(
-        area.getX() + 14.0f,
-        area.getY() + 2.0f,
-        area.getRight() - 14.0f,
-        area.getY() + 2.0f,
-        1.0f);
-
-    // Panel title.
-    auto titleArea = area.removeFromTop(48.0f);
-
-    g.setColour(textColour);
-    g.setFont(juce::Font(17.0f, juce::Font::bold));
-
-    g.drawText(
-        title,
-        titleArea.toNearestInt(),
-        juce::Justification::centred,
-        false);
-
-    // Red title separator.
-    const float lineY = titleArea.getBottom() - 1.0f;
-
-    g.setColour(redColour.withAlpha(0.12f));
-    g.drawLine(
-        area.getX() + 15.0f,
-        lineY,
-        area.getRight() - 15.0f,
-        lineY,
-        5.0f);
-
-    g.setColour(redColour.withAlpha(0.8f));
-    g.drawLine(
-        area.getX() + 15.0f,
-        lineY,
-        area.getRight() - 15.0f,
-        lineY,
-        1.0f);
-}
-
-//==============================================================
-// MAIN PAINT
-//==============================================================
-
-void WaveringAudioProcessorEditor::paint(juce::Graphics& g)
-{
-    auto bounds = getLocalBounds().toFloat();
-
-    // Main background.
-    juce::ColourGradient backgroundGradient(
-        juce::Colour::fromRGB(19, 19, 24),
-        0.0f, 0.0f,
-        backgroundColour,
-        0.0f, bounds.getBottom(),
-        false);
-
-    g.setGradientFill(backgroundGradient);
+    // 1. Background: Deep Black/Graphite Gradient
+    juce::ColourGradient bgGrad (gothicLF.bgBlack, 0, 0,
+                                 gothicLF.graphite, 0, (float) getHeight(), false);
+    g.setFillType (bgGrad);
     g.fillAll();
 
-    // Subtle background technical lines.
-    g.setColour(
-        juce::Colours::white.withAlpha(0.018f));
-
-    for (int i = 0; i < getWidth(); i += 32)
+    // 2. Panel Backgrounds (Metallic Plates)
+    auto drawPanel = [&g, &gothicLF] (juce::Rectangle<int> bounds, const juce::String& title)
     {
-        g.drawVerticalLine(
-            i, 0.0f, static_cast<float>(getHeight()));
-    }
+        // Plate Gradient
+        juce::ColourGradient plateGrad (gothicLF.steel, bounds.getX(), bounds.getY(),
+                                        gothicLF.graphite, bounds.getX(), bounds.getBottom(), false);
+        g.setGradientFill (plateGrad);
+        g.fillRoundedRectangle (bounds.toFloat(), 10.0f);
+        
+        // Border
+        g.setColour (gothicLF.bloodRed.withAlpha(0.5f));
+        g.drawRoundedRectangle (bounds.toFloat(), 10.0f, 2.0f);
+        
+        // Inner Shadow/Bevel
+        g.setColour (juce::Colours::black.withAlpha(0.3f));
+        g.drawRoundedRectangle (bounds.reduced(2).toFloat(), 10.0f, 1.0f);
+    };
 
-    // Header.
-    auto header = bounds.removeFromTop(95.0f);
+    // Distortion Panel
+    drawPanel (distortionArea, "DISTORTION MODULE");
+    // Waveguide Panel
+    drawPanel (waveguideArea, "WAVEGUIDE MODULE");
 
-    g.setColour(juce::Colour::fromRGB(235, 235, 240));
-    g.setFont(juce::Font(29.0f, juce::Font::bold));
-
-    g.drawText(
-        "W A V E R I N G",
-        header.withTrimmedTop(12.0f).toNearestInt(),
-        juce::Justification::centred,
-        false);
-
-    g.setColour(redColour);
-    g.setFont(juce::Font(11.0f, juce::Font::bold));
-
-    g.drawText(
-        "DISTORTION MODULATION SYSTEM",
-        header.withTrimmedTop(55.0f).toNearestInt(),
-        juce::Justification::centred,
-        false);
-
-    // Header red light.
-    const float lightY = 87.0f;
-
-    g.setColour(redColour.withAlpha(0.18f));
-    g.fillEllipse(
-        getWidth() * 0.5f - 35.0f,
-        lightY - 5.0f,
-        70.0f, 10.0f);
-
-    g.setColour(redColour);
-    g.drawLine(
-        getWidth() * 0.5f - 35.0f,
-        lightY,
-        getWidth() * 0.5f + 35.0f,
-        lightY,
-        1.2f);
-
-    // Main panels.
-    auto content = getLocalBounds().toFloat();
-    content.removeFromTop(105.0f);
-    content.removeFromBottom(55.0f);
-    content.reduce(18.0f, 0.0f);
-
-    const float gap = 16.0f;
-    const float panelWidth = (content.getWidth() - gap) * 0.5f;
-
-    auto distortionArea = juce::Rectangle<float>(
-        content.getX(),
-        content.getY(),
-        panelWidth,
-        content.getHeight());
-
-    auto waveguideArea = juce::Rectangle<float>(
-        content.getX() + panelWidth + gap,
-        content.getY(),
-        panelWidth,
-        content.getHeight());
-
-    drawPanel(g, distortionArea, "01  /  DISTORTION");
-    drawPanel(g, waveguideArea, "02  /  WAVEGUIDE RESONATOR");
-
-    // Footer.
-    g.setColour(
-        juce::Colour::fromRGB(105, 105, 115));
-
-    g.setFont(juce::Font(10.0f));
-
-    g.drawText(
-        "WAVERING AUDIO  |  PRECISION DSP  |  VST3",
-        getLocalBounds().removeFromBottom(28),
-        juce::Justification::centred,
-        false);
+    // 3. Screws (Decorative)
+    auto drawScrew = [&g] (int x, int y)
+    {
+        g.setColour (juce::Colours::darkgrey);
+        g.fillEllipse (x-4, y-4, 8, 8);
+        g.setColour (juce::Colours::silver);
+        g.fillEllipse (x-2, y-2, 4, 4);
+    };
+    
+    drawScrew (10, 10);
+    drawScrew (getWidth()-10, 10);
+    drawScrew (10, getHeight()-10);
+    drawScrew (getWidth()-10, getHeight()-10);
 }
-
-//==============================================================
-// COMPONENT LAYOUT
-//==============================================================
 
 void WaveringAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds();
+    // Layout Constants
+    const int panelMargin = 20;
+    const int knobSize = 70;
+    const int labelHeight = 20;
+    const int btnHeight = 30;
+    
+    // Define Panels
+    distortionArea = getLocalBounds().removeFromLeft (getWidth() / 2).reduced (panelMargin);
+    waveguideArea = getLocalBounds().reduced (panelMargin);
+    
+    // Title
+    titleLbl.setBounds (getLocalBounds().removeFromTop (40));
 
-    area.removeFromTop(105);
-    area.removeFromBottom(55);
-    area.reduce(18, 0);
+    // --- Distortion Layout ---
+    auto distRow = distortionArea.removeFromTop (knobSize + labelHeight + 10);
+    driveKnob.setBounds (distRow.removeFromLeft (knobSize + 60));
+    driveLbl.setBounds (driveKnob.getBounds().removeFromBottom (labelHeight));
+    
+    toneKnob.setBounds (distRow.removeFromLeft (knobSize + 60));
+    toneLbl.setBounds (toneKnob.getBounds().removeFromBottom (labelHeight));
+    
+    biasKnob.setBounds (distRow.removeFromLeft (knobSize + 60));
+    biasLbl.setBounds (biasKnob.getBounds().removeFromBottom (labelHeight));
+    
+    bodyKnob.setBounds (distRow.removeFromLeft (knobSize + 60));
+    bodyLbl.setBounds (bodyKnob.getBounds().removeFromBottom (labelHeight));
+    
+    mixKnob.setBounds (distRow.removeFromLeft (knobSize + 60));
+    mixLbl.setBounds (mixKnob.getBounds().removeFromBottom (labelHeight));
 
-    constexpr int panelGap = 16;
+    distOnBtn.setBounds (distortionArea.removeFromBottom (btnHeight).reduced (20, 5));
 
-    const int panelWidth =
-        (area.getWidth() - panelGap) / 2;
+    // --- Waveguide Layout ---
+    auto waveRow = waveguideArea.removeFromTop (knobSize + labelHeight + 10);
+    rateKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
+    rateLbl.setBounds (rateKnob.getBounds().removeFromBottom (labelHeight));
+    
+    resKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
+    resLbl.setBounds (resKnob.getBounds().removeFromBottom (labelHeight));
+    
+    fbKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
+    fbLbl.setBounds (fbKnob.getBounds().removeFromBottom (labelHeight));
+    
+    dampKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
+    dampLbl.setBounds (dampKnob.getBounds().removeFromBottom (labelHeight));
+    
+    charKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
+    charLbl.setBounds (charKnob.getBounds().removeFromBottom (labelHeight));
+    
+    waveMixKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
+    waveMixLbl.setBounds (waveMixKnob.getBounds().removeFromBottom (labelHeight));
 
-    auto distortionArea =
-        area.removeFromLeft(panelWidth);
+    waveOnBtn.setBounds (waveguideArea.removeFromBottom (btnHeight).reduced (20, 5));
+}
 
-    area.removeFromLeft(panelGap);
-
-    auto waveguideArea = area;
-
-    distortionArea.reduce(12, 12);
-    waveguideArea.reduce(12, 12);
-
-    // Reserve panel heading space.
-    distortionArea.removeFromTop(58);
-    waveguideArea.removeFromTop(58);
-
-    // Bottom space for labels and editable values.
-    distortionArea.removeFromBottom(12);
-    waveguideArea.removeFromBottom(12);
-
-    // Distortion: 5 controls.
-    const int distortionCount = 5;
-    const int distortionCellWidth =
-        distortionArea.getWidth() / distortionCount;
-
-    for (int i = 0; i < distortionCount; ++i)
-    {
-        auto cell = distortionArea.withX(
-            distortionArea.getX() + i * distortionCellWidth)
-            .withWidth(distortionCellWidth);
-
-        labels[static_cast<size_t>(i)].setBounds(
-            cell.removeFromBottom(25));
-
-        sliders[static_cast<size_t>(i)].setBounds(
-            cell.reduced(3, 0));
-    }
-
-    // Waveguide: 6 controls.
-    const int waveguideCount = 6;
-    const int waveguideCellWidth =
-        waveguideArea.getWidth() / waveguideCount;
-
-    for (int i = 0; i < waveguideCount; ++i)
-    {
-        auto cell = waveguideArea.withX(
-            waveguideArea.getX() + i * waveguideCellWidth)
-            .withWidth(waveguideCellWidth);
-
-        const int sliderIndex = i + distortionCount;
-
-        labels[static_cast<size_t>(sliderIndex)].setBounds(
-            cell.removeFromBottom(25));
-
-        sliders[static_cast<size_t>(sliderIndex)].setBounds(
-            cell.reduced(3, 0));
-    }
-
-    // Module switches.
-    distortionButton.setBounds(
-        25,
-        getHeight() - 47,
-        180,
-        32);
-
-    waveguideButton.setBounds(
-        getWidth() - 205,
-        getHeight() - 47,
-        180,
-        32);
+void WaveringAudioProcessorEditor::timerCallback()
+{
+    // Optional: Add subtle pulsing to neon elements if desired
 }
