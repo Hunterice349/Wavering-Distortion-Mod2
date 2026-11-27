@@ -8,17 +8,19 @@ class DistortionDSP {
 public:
     DistortionDSP();
     
+    // Основные методы обработки
     void prepareToPlay(double sampleRate, int samplesPerBlock);
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
     void reset();
 
-    // Параметры
-    float drive = 0.5f;
-    float tone = 0.5f;
-    float mix = 1.0f;
-    float body = 0.5f; // Stereo width / 3D effect
+    // Параметры управления (доступны из PluginProcessor)
+    float drive = 0.5f;   // Сила искажения
+    float tone = 0.5f;    // Тембр (НЧ/ВЧ)
+    float mix = 1.0f;     // Баланс Dry/Wet
+    float body = 0.5f;    // "Тело" звука и стерео-ширина (3D эффект)
 
 private:
+    // Внутренний фильтр низких частот для тембра
     struct SimpleLPF {
         float alpha = 0.5f;
         float output = 0.0f;
@@ -42,11 +44,13 @@ private:
     SimpleLPF toneStateRight;
     double currentSampleRate = 44100.0;
 
+    // Функция реалистичного искажения (Tanh saturation)
     static inline float distortSample(float input, float driveGain) {
         if (driveGain <= 1.0f) return input;
         return std::tanh(input * driveGain);
     }
     
+    // Защита от краша (NaN/Inf)
     static inline float safeOutput(float value) {
         if (std::isnan(value) || std::isinf(value)) return 0.0f;
         return juce::jlimit(-1.0f, 1.0f, value);
