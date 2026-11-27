@@ -1,5 +1,7 @@
+
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
+#include <cmath>
 
 //==============================================================================
 // GothicLookAndFeel Implementation
@@ -14,294 +16,708 @@ WaveringAudioProcessorEditor::GothicLookAndFeel::GothicLookAndFeel()
 }
 
 void WaveringAudioProcessorEditor::GothicLookAndFeel::drawRotarySlider (
-    juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
-    const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider& slider)
+    juce::Graphics& g,
+    int x,
+    int y,
+    int width,
+    int height,
+    float sliderPos,
+    const float rotaryStartAngle,
+    const float rotaryEndAngle,
+    juce::Slider& slider)
 {
-    auto outline = graphite;
-    auto fill = neonRed;
-    auto indicator = bloodRed;
+    auto bounds = juce::Rectangle<int> (x, y, width, height)
+                      .toFloat().reduced (3.0f);
 
-    auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (2.0f);
-    auto radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) / 2.0f;
-    auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
-    auto lineW = juce::jmax (2.0f, radius * 0.08f);
-    auto arcRadius = radius - lineW * 2.0f;
+    const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f;
+    const float lineW = juce::jmax (2.0f, radius * 0.075f);
+    const float arcRadius = juce::jmax (1.0f, radius - lineW * 2.0f);
 
-    // 1. Базовая дорожка (Темный графит)
+    const float angle = rotaryStartAngle
+                      + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+
+    const auto centre = bounds.getCentre();
+
+    // Dark rotary track.
     juce::Path backgroundArc;
-    backgroundArc.addCentredArc (bounds.getCentreX(), bounds.getCentreY(),
-                                 arcRadius, arcRadius, 0.0f,
-                                 rotaryStartAngle, rotaryEndAngle, true);
-    g.setColour (outline);
-    g.strokePath (backgroundArc, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    backgroundArc.addCentredArc (
+        centre.x, centre.y,
+        arcRadius, arcRadius,
+        0.0f,
+        rotaryStartAngle,
+        rotaryEndAngle,
+        true);
 
-    // 2. Активная дуга (Неоновое красное свечение)
-    if (slider.isEnabled())
+    g.setColour (graphite.brighter (0.15f));
+    g.strokePath (
+        backgroundArc,
+        juce::PathStrokeType (
+            lineW,
+            juce::PathStrokeType::curved,
+            juce::PathStrokeType::rounded));
+
+    // Red neon active arc.
+    if (slider.isEnabled() && sliderPos > 0.0f)
     {
         juce::Path valueArc;
-        valueArc.addCentredArc (bounds.getCentreX(), bounds.getCentreY(),
-                                arcRadius, arcRadius, 0.0f,
-                                rotaryStartAngle, toAngle, true);
-        
-        // Внешнее свечение
-        g.setColour (fill.withAlpha (0.2f));
-        g.strokePath (valueArc, juce::PathStrokeType (lineW + 6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        
-        // Внутреннее свечение
-        g.setColour (fill.withAlpha (0.6f));
-        g.strokePath (valueArc, juce::PathStrokeType (lineW + 2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        
-        // Основная линия
-        g.setColour (fill);
-        g.strokePath (valueArc, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        valueArc.addCentredArc (
+            centre.x, centre.y,
+            arcRadius, arcRadius,
+            0.0f,
+            rotaryStartAngle,
+            angle,
+            true);
+
+        g.setColour (neonRed.withAlpha (0.16f));
+        g.strokePath (
+            valueArc,
+            juce::PathStrokeType (lineW + 9.0f));
+
+        g.setColour (neonRed.withAlpha (0.4f));
+        g.strokePath (
+            valueArc,
+            juce::PathStrokeType (lineW + 4.0f));
+
+        g.setColour (neonRed);
+        g.strokePath (
+            valueArc,
+            juce::PathStrokeType (
+                lineW,
+                juce::PathStrokeType::curved,
+                juce::PathStrokeType::rounded));
     }
 
-    // 3. Тело ручки (Фотореалистичный шлифованный металл)
-    juce::Path knobCircle;
-    knobCircle.addEllipse (bounds.reduced (radius * 0.35f));
-    
-    // Металлический градиент (сверху вниз)
-    juce::ColourGradient grad (juce::Colours::white.withAlpha(0.15f), bounds.getCentreX(), bounds.getY(),
-                               juce::Colours::black.withAlpha(0.6f), bounds.getCentreX(), bounds.getBottom(), false);
-    g.setGradientFill (grad);
-    g.fillPath (knobCircle);
-    
-    // Металлическая окантовка
-    g.setColour (steel);
-    g.strokePath (knobCircle, juce::PathStrokeType (1.0f));
+    // Metallic knob body.
+    const auto knobBounds = bounds.reduced (radius * 0.34f);
 
-    // 4. Индикатор положения (Кроваво-красная неоновая линия)
-    juce::Point<float> thumbPoint (bounds.getCentreX() + arcRadius * std::cos (toAngle - juce::MathConstants<float>::halfPi),
-                                   bounds.getCentreY() + arcRadius * std::sin (toAngle - juce::MathConstants<float>::halfPi));
+    juce::Path knob;
+    knob.addEllipse (knobBounds);
 
-    juce::Path indicatorLine;
-    indicatorLine.startNewSubPath (bounds.getCentre());
-    indicatorLine.lineTo (thumbPoint);
-    
-    // Свечение индикатора
-    g.setColour (indicator.withAlpha(0.5f));
-    g.strokePath (indicatorLine, juce::PathStrokeType (4.0f));
-    // Ядро индикатора
+    juce::ColourGradient metalGradient (
+        juce::Colour (0xff555555),
+        knobBounds.getCentreX(),
+        knobBounds.getY(),
+        juce::Colour (0xff101010),
+        knobBounds.getCentreX(),
+        knobBounds.getBottom(),
+        false);
+
+    g.setGradientFill (metalGradient);
+    g.fillPath (knob);
+
+    // Metallic outer rim.
+    g.setColour (steel.brighter (0.35f));
+    g.strokePath (knob, juce::PathStrokeType (1.4f));
+
+    // Inner dark surface.
+    g.setColour (juce::Colours::black.withAlpha (0.28f));
+    g.fillEllipse (knobBounds.reduced (3.0f));
+
+    // Indicator.
+    const float indicatorRadius = knobBounds.getWidth() * 0.34f;
+
+    juce::Point<float> indicatorPoint (
+        centre.x + indicatorRadius * std::cos (
+            angle - juce::MathConstants<float>::halfPi),
+        centre.y + indicatorRadius * std::sin (
+            angle - juce::MathConstants<float>::halfPi));
+
+    juce::Path indicator;
+    indicator.startNewSubPath (centre);
+    indicator.lineTo (indicatorPoint);
+
+    g.setColour (bloodRed.withAlpha (0.55f));
+    g.strokePath (indicator, juce::PathStrokeType (5.0f));
+
     g.setColour (neonRed);
-    g.strokePath (indicatorLine, juce::PathStrokeType (2.0f));
-    
-    // Центральная точка
+    g.strokePath (
+        indicator,
+        juce::PathStrokeType (
+            2.2f,
+            juce::PathStrokeType::curved,
+            juce::PathStrokeType::rounded));
+
     g.setColour (neonRed);
-    g.fillEllipse (bounds.getCentreX() - 2, bounds.getCentreY() - 2, 4, 4);
+    g.fillEllipse (
+        centre.x - 2.5f,
+        centre.y - 2.5f,
+        5.0f,
+        5.0f);
+
+    // Small metallic highlight.
+    g.setColour (juce::Colours::white.withAlpha (0.10f));
+    g.drawLine (
+        knobBounds.getX() + 7.0f,
+        knobBounds.getY() + 5.0f,
+        knobBounds.getRight() - 7.0f,
+        knobBounds.getY() + 5.0f,
+        1.0f);
 }
 
-juce::Font WaveringAudioProcessorEditor::GothicLookAndFeel::getLabelFont (juce::Label& label)
+juce::Font WaveringAudioProcessorEditor::GothicLookAndFeel::getLabelFont (
+    juce::Label& label)
 {
-    return juce::Font ("Courier New", 14.0f, juce::Font::bold);
+    return label.getFont();
 }
 
-void WaveringAudioProcessorEditor::GothicLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
+void WaveringAudioProcessorEditor::GothicLookAndFeel::drawLabel (
+    juce::Graphics& g,
+    juce::Label& label)
 {
-    g.fillAll (label.findColour (juce::Label::backgroundColourId));
-
     if (! label.isBeingEdited())
     {
         auto area = label.getLocalBounds().reduced (2);
+
         g.setColour (label.findColour (juce::Label::textColourId));
-        g.setFont (getLabelFont (label));
-        g.drawText (label.getText(), area, label.getJustificationType(), true);
-        
-        // Тонкая рамка для поля ввода
-        g.setColour (steel);
-        g.drawRect (area, 1.0f);
+        g.setFont (label.getFont());
+
+        g.drawText (
+            label.getText(),
+            area,
+            label.getJustificationType(),
+            true);
     }
 }
 
 //==============================================================================
-// Editor Implementation
+// Editor Constructor
 //==============================================================================
 
-WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (WaveringAudioProcessor& p)
+WaveringAudioProcessorEditor::WaveringAudioProcessorEditor (
+    WaveringAudioProcessor& p)
     : AudioProcessorEditor (&p)
 {
     setLookAndFeel (&gothicLF);
     setOpaque (true);
 
-    // Лямбда для быстрой настройки всех ручек
-    auto setupKnob = [this] (PremiumKnob& knob) {
-        knob.setColour (juce::Slider::textBoxTextColourId, gothicLF.textSilver);
-        knob.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-        knob.setColour (juce::Slider::rotarySliderFillColourId, gothicLF.neonRed);
-        knob.setColour (juce::Slider::rotarySliderOutlineColourId, gothicLF.graphite);
+    // Configure rotary controls.
+    auto setupKnob = [this] (PremiumKnob& knob)
+    {
+        knob.setSliderStyle (
+            juce::Slider::RotaryHorizontalVerticalDrag);
+
+        // Editable numerical values.
+        knob.setTextBoxStyle (
+            juce::Slider::TextBoxBelow,
+            false,
+            60,
+            20);
+
+        knob.setColour (
+            juce::Slider::textBoxTextColourId,
+            gothicLF.textSilver);
+
+        knob.setColour (
+            juce::Slider::textBoxBackgroundColourId,
+            juce::Colour (0xff101010));
+
+        knob.setColour (
+            juce::Slider::textBoxOutlineColourId,
+            gothicLF.bloodRed);
+
+        knob.setColour (
+            juce::Slider::rotarySliderFillColourId,
+            gothicLF.neonRed);
+
+        knob.setColour (
+            juce::Slider::rotarySliderOutlineColourId,
+            gothicLF.graphite);
+
         knob.setLookAndFeel (&gothicLF);
     };
 
-    // --- Distortion Section ---
-    addAndMakeVisible (driveKnob); setupKnob(driveKnob);
-    driveAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "drive", driveKnob));
-    addAndMakeVisible (driveLbl); driveLbl.setText ("DRIVE", juce::dontSendNotification);
+    // Configure labels.
+    auto setupLabel = [this] (GothicLabel& label)
+    {
+        label.setJustificationType (
+            juce::Justification::centred);
 
-    addAndMakeVisible (toneKnob); setupKnob(toneKnob);
-    toneAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "tone", toneKnob));
-    addAndMakeVisible (toneLbl); toneLbl.setText ("TONE", juce::dontSendNotification);
+        label.setFont (
+            juce::Font (
+                "Courier New",
+                12.0f,
+                juce::Font::bold));
 
-    addAndMakeVisible (biasKnob); setupKnob(biasKnob);
-    biasAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "bias", biasKnob));
-    addAndMakeVisible (biasLbl); biasLbl.setText ("BIAS", juce::dontSendNotification);
+        label.setColour (
+            juce::Label::textColourId,
+            gothicLF.textSilver);
+    };
 
-    addAndMakeVisible (bodyKnob); setupKnob(bodyKnob);
-    bodyAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "body", bodyKnob));
-    addAndMakeVisible (bodyLbl); bodyLbl.setText ("BODY", juce::dontSendNotification);
+    //==========================================================================
+    // DISTORTION
+    //==========================================================================
 
-    addAndMakeVisible (mixKnob); setupKnob(mixKnob);
-    mixAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "mix", mixKnob));
-    addAndMakeVisible (mixLbl); mixLbl.setText ("MIX", juce::dontSendNotification);
+    addAndMakeVisible (driveKnob);
+    setupKnob (driveKnob);
+    driveAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "drive", driveKnob));
+
+    addAndMakeVisible (driveLbl);
+    driveLbl.setText ("DRIVE", juce::dontSendNotification);
+    setupLabel (driveLbl);
+
+    addAndMakeVisible (toneKnob);
+    setupKnob (toneKnob);
+    toneAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "tone", toneKnob));
+
+    addAndMakeVisible (toneLbl);
+    toneLbl.setText ("TONE", juce::dontSendNotification);
+    setupLabel (toneLbl);
+
+    addAndMakeVisible (biasKnob);
+    setupKnob (biasKnob);
+    biasAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "bias", biasKnob));
+
+    addAndMakeVisible (biasLbl);
+    biasLbl.setText ("BIAS", juce::dontSendNotification);
+    setupLabel (biasLbl);
+
+    addAndMakeVisible (bodyKnob);
+    setupKnob (bodyKnob);
+    bodyAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "body", bodyKnob));
+
+    addAndMakeVisible (bodyLbl);
+    bodyLbl.setText ("BODY", juce::dontSendNotification);
+    setupLabel (bodyLbl);
+
+    addAndMakeVisible (mixKnob);
+    setupKnob (mixKnob);
+    mixAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "mix", mixKnob));
+
+    addAndMakeVisible (mixLbl);
+    mixLbl.setText ("MIX", juce::dontSendNotification);
+    setupLabel (mixLbl);
 
     addAndMakeVisible (distOnBtn);
     distOnBtn.setButtonText ("DISTORTION ON");
     distOnBtn.setClickingTogglesState (true);
-    distOnAtt.reset (new juce::AudioProcessorValueTreeState::ButtonAttachment (p.apvts, "distortionEnabled", distOnBtn));
+    distOnBtn.setColour (
+        juce::TextButton::buttonColourId,
+        gothicLF.graphite);
+    distOnBtn.setColour (
+        juce::TextButton::buttonOnColourId,
+        gothicLF.neonRed);
+    distOnBtn.setColour (
+        juce::TextButton::textColourOffId,
+        gothicLF.textSilver);
+    distOnBtn.setColour (
+        juce::TextButton::textColourOnId,
+        gothicLF.bgBlack);
 
-    // --- Waveguide Section ---
-    addAndMakeVisible (rateKnob); setupKnob(rateKnob);
-    rateAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveRate", rateKnob));
-    addAndMakeVisible (rateLbl); rateLbl.setText ("RATE", juce::dontSendNotification);
+    distOnAtt.reset (
+        new juce::AudioProcessorValueTreeState::ButtonAttachment (
+            p.apvts, "distortionEnabled", distOnBtn));
 
-    addAndMakeVisible (resKnob); setupKnob(resKnob);
-    resAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveResonance", resKnob));
-    addAndMakeVisible (resLbl); resLbl.setText ("RESONANCE", juce::dontSendNotification);
+    //==========================================================================
+    // WAVEGUIDE
+    //==========================================================================
 
-    addAndMakeVisible (fbKnob); setupKnob(fbKnob);
-    fbAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveFeedback", fbKnob));
-    addAndMakeVisible (fbLbl); fbLbl.setText ("FEEDBACK", juce::dontSendNotification);
+    addAndMakeVisible (rateKnob);
+    setupKnob (rateKnob);
+    rateAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "waveRate", rateKnob));
 
-    addAndMakeVisible (dampKnob); setupKnob(dampKnob);
-    dampAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveDamping", dampKnob));
-    addAndMakeVisible (dampLbl); dampLbl.setText ("DAMPING", juce::dontSendNotification);
+    addAndMakeVisible (rateLbl);
+    rateLbl.setText ("RATE", juce::dontSendNotification);
+    setupLabel (rateLbl);
 
-    addAndMakeVisible (charKnob); setupKnob(charKnob);
-    charAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveCharacter", charKnob));
-    addAndMakeVisible (charLbl); charLbl.setText ("CHARACTER", juce::dontSendNotification);
+    addAndMakeVisible (resKnob);
+    setupKnob (resKnob);
+    resAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "waveResonance", resKnob));
 
-    addAndMakeVisible (waveMixKnob); setupKnob(waveMixKnob);
-    waveMixAtt.reset (new juce::AudioProcessorValueTreeState::SliderAttachment (p.apvts, "waveMix", waveMixKnob));
-    addAndMakeVisible (waveMixLbl); waveMixLbl.setText ("WAVE MIX", juce::dontSendNotification);
+    addAndMakeVisible (resLbl);
+    resLbl.setText ("RESONANCE", juce::dontSendNotification);
+    setupLabel (resLbl);
+
+    addAndMakeVisible (fbKnob);
+    setupKnob (fbKnob);
+    fbAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "waveFeedback", fbKnob));
+
+    addAndMakeVisible (fbLbl);
+    fbLbl.setText ("FEEDBACK", juce::dontSendNotification);
+    setupLabel (fbLbl);
+
+    addAndMakeVisible (dampKnob);
+    setupKnob (dampKnob);
+    dampAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "waveDamping", dampKnob));
+
+    addAndMakeVisible (dampLbl);
+    dampLbl.setText ("DAMPING", juce::dontSendNotification);
+    setupLabel (dampLbl);
+
+    addAndMakeVisible (charKnob);
+    setupKnob (charKnob);
+    charAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "waveCharacter", charKnob));
+
+    addAndMakeVisible (charLbl);
+    charLbl.setText ("CHARACTER", juce::dontSendNotification);
+    setupLabel (charLbl);
+
+    addAndMakeVisible (waveMixKnob);
+    setupKnob (waveMixKnob);
+    waveMixAtt.reset (
+        new juce::AudioProcessorValueTreeState::SliderAttachment (
+            p.apvts, "waveMix", waveMixKnob));
+
+    addAndMakeVisible (waveMixLbl);
+    waveMixLbl.setText ("WAVE MIX", juce::dontSendNotification);
+    setupLabel (waveMixLbl);
 
     addAndMakeVisible (waveOnBtn);
     waveOnBtn.setButtonText ("WAVEGUIDE ON");
     waveOnBtn.setClickingTogglesState (true);
-    waveOnAtt.reset (new juce::AudioProcessorValueTreeState::ButtonAttachment (p.apvts, "waveguideEnabled", waveOnBtn));
+    waveOnBtn.setColour (
+        juce::TextButton::buttonColourId,
+        gothicLF.graphite);
+    waveOnBtn.setColour (
+        juce::TextButton::buttonOnColourId,
+        gothicLF.neonRed);
+    waveOnBtn.setColour (
+        juce::TextButton::textColourOffId,
+        gothicLF.textSilver);
+    waveOnBtn.setColour (
+        juce::TextButton::textColourOnId,
+        gothicLF.bgBlack);
 
-    // --- Title ---
+    waveOnAtt.reset (
+        new juce::AudioProcessorValueTreeState::ButtonAttachment (
+            p.apvts, "waveguideEnabled", waveOnBtn));
+
+    //==========================================================================
+    // TITLE
+    //==========================================================================
+
     addAndMakeVisible (titleLbl);
-    titleLbl.setText ("WAVERING DISTORTION MOD2", juce::dontSendNotification);
-    titleLbl.setFont (juce::Font ("Courier New", 22.0f, juce::Font::bold));
-    titleLbl.setColour (juce::Label::textColourId, gothicLF.neonRed);
+
+    titleLbl.setText (
+        "WAVERING DISTORTION MOD2",
+        juce::dontSendNotification);
+
+    titleLbl.setFont (
+        juce::Font (
+            "Courier New",
+            22.0f,
+            juce::Font::bold));
+
+    titleLbl.setColour (
+        juce::Label::textColourId,
+        gothicLF.neonRed);
+
+    titleLbl.setJustificationType (
+        juce::Justification::centred);
 
     setSize (900, 520);
+
     startTimerHz (30);
 }
+
+//==============================================================================
+// Destructor
+//==============================================================================
 
 WaveringAudioProcessorEditor::~WaveringAudioProcessorEditor()
 {
     setLookAndFeel (nullptr);
 }
 
+//==============================================================================
+// Paint
+//==============================================================================
+
 void WaveringAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    // 1. Фон: Глубокий черно-графитовый градиент
-    juce::ColourGradient bgGrad (gothicLF.bgBlack, 0, 0,
-                                 gothicLF.graphite, 0, (float) getHeight(), false);
-    g.setFillType (bgGrad);
+    // Main black / graphite background.
+    juce::ColourGradient background (
+        gothicLF.bgBlack,
+        0.0f,
+        0.0f,
+        gothicLF.graphite,
+        0.0f,
+        static_cast<float> (getHeight()),
+        false);
+
+    g.setGradientFill (background);
     g.fillAll();
 
-    // 2. Металлические панели модулей
-    auto drawPanel = [&g, &gothicLF] (juce::Rectangle<int> bounds, const juce::String& title)
+    // Subtle background border.
+    g.setColour (gothicLF.bloodRed.withAlpha (0.35f));
+    g.drawRect (getLocalBounds(), 1);
+
+    // Module panels.
+    auto drawPanel = [this, &g] (
+        juce::Rectangle<int> bounds,
+        const juce::String& panelTitle)
     {
-        juce::ColourGradient plateGrad (gothicLF.steel, bounds.getX(), bounds.getY(),
-                                        gothicLF.graphite, bounds.getX(), bounds.getBottom(), false);
-        g.setGradientFill (plateGrad);
-        g.fillRoundedRectangle (bounds.toFloat(), 10.0f);
-        
-        // Красная неоновая окантовка
-        g.setColour (gothicLF.bloodRed.withAlpha(0.6f));
-        g.drawRoundedRectangle (bounds.toFloat(), 10.0f, 2.0f);
-        
-        // Внутренняя тень для эффекта углубления
-        g.setColour (juce::Colours::black.withAlpha(0.4f));
-        g.drawRoundedRectangle (bounds.reduced(2).toFloat(), 10.0f, 1.0f);
+        juce::ColourGradient plateGradient (
+            gothicLF.steel,
+            static_cast<float> (bounds.getX()),
+            static_cast<float> (bounds.getY()),
+            gothicLF.bgBlack,
+            static_cast<float> (bounds.getX()),
+            static_cast<float> (bounds.getBottom()),
+            false);
+
+        g.setGradientFill (plateGradient);
+
+        g.fillRoundedRectangle (
+            bounds.toFloat(),
+            9.0f);
+
+        // Outer red edge.
+        g.setColour (
+            gothicLF.bloodRed.withAlpha (0.85f));
+
+        g.drawRoundedRectangle (
+            bounds.toFloat(),
+            9.0f,
+            1.6f);
+
+        // Inner metallic edge.
+        g.setColour (
+            gothicLF.steel.brighter (0.35f));
+
+        g.drawRoundedRectangle (
+            bounds.reduced (3).toFloat(),
+            7.0f,
+            0.8f);
+
+        // Panel heading.
+        auto heading = bounds.reduced (12);
+        heading.removeFromBottom (bounds.getHeight() - 34);
+        heading.setHeight (24);
+
+        g.setColour (gothicLF.neonRed);
+        g.setFont (
+            juce::Font (
+                "Courier New",
+                13.0f,
+                juce::Font::bold));
+
+        g.drawText (
+            panelTitle,
+            heading,
+            juce::Justification::centred,
+            false);
+
+        // Separator under heading.
+        const int separatorY = bounds.getY() + 39;
+
+        g.setColour (
+            gothicLF.bloodRed.withAlpha (0.7f));
+
+        g.drawLine (
+            static_cast<float> (bounds.getX() + 14),
+            static_cast<float> (separatorY),
+            static_cast<float> (bounds.getRight() - 14),
+            static_cast<float> (separatorY),
+            1.0f);
     };
 
-    drawPanel (distortionArea, "DISTORTION MODULE");
-    drawPanel (waveguideArea, "WAVEGUIDE MODULE");
+    drawPanel (
+        distortionArea,
+        "I   /   DISTORTION");
 
-    // 3. Декоративные винты по углам корпуса
+    drawPanel (
+        waveguideArea,
+        "II   /   WAVEGUIDE");
+
+    // Decorative metallic screws.
     auto drawScrew = [&g] (int x, int y)
     {
-        g.setColour (juce::Colours::darkgrey);
-        g.fillEllipse (x-4, y-4, 8, 8);
-        g.setColour (juce::Colours::silver);
-        g.fillEllipse (x-2, y-2, 4, 4);
+        g.setColour (juce::Colour (0xff080808));
+        g.fillEllipse (
+            static_cast<float> (x - 5),
+            static_cast<float> (y - 5),
+            10.0f,
+            10.0f);
+
+        g.setColour (juce::Colour (0xff777777));
+        g.drawEllipse (
+            static_cast<float> (x - 4),
+            static_cast<float> (y - 4),
+            8.0f,
+            8.0f,
+            1.0f);
+
+        g.setColour (juce::Colour (0xffaaaaaa));
+        g.drawLine (
+            static_cast<float> (x - 2),
+            static_cast<float> (y + 2),
+            static_cast<float> (x + 2),
+            static_cast<float> (y - 2),
+            1.0f);
     };
-    
+
     drawScrew (12, 12);
-    drawScrew (getWidth()-12, 12);
-    drawScrew (12, getHeight()-12);
-    drawScrew (getWidth()-12, getHeight()-12);
+    drawScrew (getWidth() - 12, 12);
+    drawScrew (12, getHeight() - 12);
+    drawScrew (getWidth() - 12, getHeight() - 12);
 }
+
+//==============================================================================
+// Layout
+//==============================================================================
 
 void WaveringAudioProcessorEditor::resized()
 {
-    const int panelMargin = 20;
-    const int knobSize = 70;
-    const int labelHeight = 20;
-    const int btnHeight = 30;
-    
-    // Разделение на две панели
-    distortionArea = getLocalBounds().removeFromLeft (getWidth() / 2).reduced (panelMargin);
-    waveguideArea = getLocalBounds().reduced (panelMargin);
-    
-    // Заголовок
-    titleLbl.setBounds (getLocalBounds().removeFromTop (50).withTrimmedLeft(20));
+    const int outerMargin = 18;
+    const int panelGap = 12;
+    const int panelTop = 64;
+    const int panelBottom = 14;
 
-    // --- Distortion Layout ---
-    auto distRow = distortionArea.removeFromTop (knobSize + labelHeight + 10);
-    driveKnob.setBounds (distRow.removeFromLeft (knobSize + 60));
-    driveLbl.setBounds (driveKnob.getBounds().removeFromBottom (labelHeight));
-    
-    toneKnob.setBounds (distRow.removeFromLeft (knobSize + 60));
-    toneLbl.setBounds (toneKnob.getBounds().removeFromBottom (labelHeight));
-    
-    biasKnob.setBounds (distRow.removeFromLeft (knobSize + 60));
-    biasLbl.setBounds (biasKnob.getBounds().removeFromBottom (labelHeight));
-    
-    bodyKnob.setBounds (distRow.removeFromLeft (knobSize + 60));
-    bodyLbl.setBounds (bodyKnob.getBounds().removeFromBottom (labelHeight));
-    
-    mixKnob.setBounds (distRow.removeFromLeft (knobSize + 60));
-    mixLbl.setBounds (mixKnob.getBounds().removeFromBottom (labelHeight));
+    // Header.
+    titleLbl.setBounds (
+        25,
+        12,
+        getWidth() - 50,
+        40);
 
-    distOnBtn.setBounds (distortionArea.removeFromBottom (btnHeight).reduced (20, 5));
+    // Two independent panels.
+    auto available = getLocalBounds()
+                         .withTrimmedTop (panelTop)
+                         .withTrimmedBottom (panelBottom)
+                         .reduced (outerMargin, 0);
 
-    // --- Waveguide Layout ---
-    auto waveRow = waveguideArea.removeFromTop (knobSize + labelHeight + 10);
-    rateKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
-    rateLbl.setBounds (rateKnob.getBounds().removeFromBottom (labelHeight));
-    
-    resKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
-    resLbl.setBounds (resKnob.getBounds().removeFromBottom (labelHeight));
-    
-    fbKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
-    fbLbl.setBounds (fbKnob.getBounds().removeFromBottom (labelHeight));
-    
-    dampKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
-    dampLbl.setBounds (dampKnob.getBounds().removeFromBottom (labelHeight));
-    
-    charKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
-    charLbl.setBounds (charKnob.getBounds().removeFromBottom (labelHeight));
-    
-    waveMixKnob.setBounds (waveRow.removeFromLeft (knobSize + 60));
-    waveMixLbl.setBounds (waveMixKnob.getBounds().removeFromBottom (labelHeight));
+    const int panelWidth =
+        (available.getWidth() - panelGap) / 2;
 
-    waveOnBtn.setBounds (waveguideArea.removeFromBottom (btnHeight).reduced (20, 5));
+    distortionArea = available.removeFromLeft (panelWidth);
+
+    available.removeFromLeft (panelGap);
+
+    waveguideArea = available;
+
+    // Reusable control placement.
+    auto placeControl = [] (
+        PremiumKnob& knob,
+        GothicLabel& label,
+        juce::Rectangle<int> cell)
+    {
+        auto labelArea = cell.removeFromTop (22);
+
+        label.setBounds (
+            labelArea.reduced (2, 0));
+
+        const int sliderWidth = 82;
+        const int sliderHeight = 108;
+
+        auto sliderArea = cell;
+
+        auto sliderBounds = juce::Rectangle<int> (
+            0,
+            0,
+            sliderWidth,
+            sliderHeight);
+
+        sliderBounds.setCentre (
+            sliderArea.getCentre());
+
+        knob.setBounds (sliderBounds);
+    };
+
+    // Prepare inner module areas.
+    auto makeControlArea = [] (
+        juce::Rectangle<int> panel)
+    {
+        panel = panel.reduced (12);
+        panel.removeFromTop (43);
+        panel.removeFromBottom (42);
+        return panel;
+    };
+
+    //==========================================================================
+    // DISTORTION GRID: 3 + 2 CONTROLS
+    //==========================================================================
+
+    auto distControls = makeControlArea (distortionArea);
+
+    const int distCellWidth =
+        distControls.getWidth() / 3;
+
+    const int distCellHeight =
+        distControls.getHeight() / 2;
+
+    auto distCell = [&] (int column, int row)
+    {
+        return juce::Rectangle<int> (
+            distControls.getX() + column * distCellWidth,
+            distControls.getY() + row * distCellHeight,
+            distCellWidth,
+            distCellHeight);
+    };
+
+    placeControl (driveKnob, driveLbl, distCell (0, 0));
+    placeControl (toneKnob, toneLbl, distCell (1, 0));
+    placeControl (biasKnob, biasLbl, distCell (2, 0));
+
+    placeControl (bodyKnob, bodyLbl, distCell (0, 1));
+    placeControl (mixKnob, mixLbl, distCell (1, 1));
+
+    distOnBtn.setBounds (
+        distortionArea.getX() + 20,
+        distortionArea.getBottom() - 38,
+        distortionArea.getWidth() - 40,
+        26);
+
+    //==========================================================================
+    // WAVEGUIDE GRID: 3 + 3 CONTROLS
+    //==========================================================================
+
+    auto waveControls = makeControlArea (waveguideArea);
+
+    const int waveCellWidth =
+        waveControls.getWidth() / 3;
+
+    const int waveCellHeight =
+        waveControls.getHeight() / 2;
+
+    auto waveCell = [&] (int column, int row)
+    {
+        return juce::Rectangle<int> (
+            waveControls.getX() + column * waveCellWidth,
+            waveControls.getY() + row * waveCellHeight,
+            waveCellWidth,
+            waveCellHeight);
+    };
+
+    placeControl (rateKnob, rateLbl, waveCell (0, 0));
+    placeControl (resKnob, resLbl, waveCell (1, 0));
+    placeControl (fbKnob, fbLbl, waveCell (2, 0));
+
+    placeControl (dampKnob, dampLbl, waveCell (0, 1));
+    placeControl (charKnob, charLbl, waveCell (1, 1));
+    placeControl (waveMixKnob, waveMixLbl, waveCell (2, 1));
+
+    waveOnBtn.setBounds (
+        waveguideArea.getX() + 20,
+        waveguideArea.getBottom() - 38,
+        waveguideArea.getWidth() - 40,
+        26);
 }
+
+//==============================================================================
+// Timer
+//==============================================================================
 
 void WaveringAudioProcessorEditor::timerCallback()
 {
-    // Можно добавить легкую пульсацию неона, если потребуется
+    // Reserved for future interface animation.
 }
