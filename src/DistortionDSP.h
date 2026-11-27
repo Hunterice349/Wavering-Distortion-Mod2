@@ -1,52 +1,40 @@
 #pragma once
 
-#include <algorithm>
-#include <cmath>
+#include <JuceHeader.h>
 
-// Allocation-free, channel-linked parameter smoothing and distortion processing.
-class DistortionDSP
-{
+class DistortionDSP {
 public:
-    struct Parameters
-    {
-        float drive = 0.0f;
-        float tone = 5.0f;
-        float bias = 5.0f;
-        float body = 5.0f;
-        float mix = 10.0f;
-        bool enabled = true;
-    };
+    DistortionDSP();
+    
+    void prepareToPlay(double sampleRate, int samplesPerBlock);
+    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
+    void reset();
 
-    void prepare (double sampleRate, const Parameters& initial) noexcept;
-    void setParameters (const Parameters& parameters) noexcept;
-    void reset() noexcept;
-
-    void processFrame (float inputLeft, float inputRight, bool stereo,
-                       float& outputLeft, float& outputRight) noexcept;
+    // Parameters - Ensure these are set by PluginProcessor before calling processBlock
+    float drive = 0.5f;
+    float tone = 0.5f;
+    float mix = 1.0f;
+    float body = 0.0f; // Used as stereo width/enhancement
 
 private:
-    class Smoother
-    {
-    public:
-        void reset (int rampSamples, float value) noexcept;
-        void setTarget (float value) noexcept;
-        float next() noexcept;
-
-    private:
-        float current = 0.0f;
-        float target = 0.0f;
-        float increment = 0.0f;
-        int remaining = 0;
-        int rampLength = 1;
+    // Internal state for filters
+    struct SimpleLPF {
+        float alpha = 0.5f;
+        float output = 0.0f;
+        
+        void setCutoffFrequency(float sampleRate, float cutoffHz) {
+            float rc = 1.0f / (2.0f * juce::MathConstants<float>::pi * cutoffHz);
+            alpha = sampleRate / (sampleRate + 1.0f / rc);
+        }
+        
+        float process(float input) {
+            output = alpha * input + (1.0f - alpha) * output;
+            return output;
+        }
+        
+        void reset() { output = 0.0f; }
     };
 
-    float processChannel (float input, float& toneState, float toneCoefficient,
-                          float drive, float bias, float body) const noexcept;
-    static float finiteOrZero (float value) noexcept;
-    static float safeOutput (float value) noexcept;
-
-    double sampleRate = 44100.0;
-    int smoothingSamples = 441;
-    Smoother driveSmoother, toneSmoother, biasSmoother, bodySmoother, mixSmoother, enableSmoother;
-    float toneStateLeft = 0.0f, toneStateRight = 0.0f;
+    SimpleLPF toneStateLeft;
+    SimpleLPF toneStateRight;
 };
