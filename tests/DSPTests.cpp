@@ -1,8 +1,7 @@
 #include <JuceHeader.h>
 #include "../src/DistortionDSP.h"
-#include <fstream> // Важно для ofstream
+#include <fstream> // Исправление ошибки отсутствия ofstream
 
-// Тест 1: Проверка экстремальных значений
 void testParameterExtremes() {
     DistortionDSP dsp;
     dsp.prepareToPlay(44100.0, 512);
@@ -30,6 +29,3 @@ void testParameterExtremes() {
         }
     }
 }
-
-// Если есть другие тесты, убедитесь, что они имеют такую же структуру:
-// void testName() { ... }
