@@ -3,8 +3,7 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 
-class WaveringAudioProcessorEditor : public juce::AudioProcessorEditor,
-                                     private juce::Timer
+class WaveringAudioProcessorEditor : public juce::AudioProcessorEditor
 {
 public:
     WaveringAudioProcessorEditor (WaveringAudioProcessor&);
@@ -12,10 +11,9 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void timerCallback() override;
 
 private:
-    // 1. LookAndFeel ДОЛЖЕН быть объявлен первым, чтобы инициализироваться до контролов
+    // Custom LookAndFeel for Gothic Neon aesthetics
     class GothicLookAndFeel : public juce::LookAndFeel_V4
     {
     public:
@@ -27,6 +25,12 @@ private:
         juce::Font getLabelFont (juce::Label&) override;
         void drawLabel (juce::Graphics&, juce::Label&) override;
         
+        void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& backgroundColour,
+                                   bool isMouseOverButton, bool isButtonDown) override;
+        
+        void drawButtonText (juce::Graphics&, juce::TextButton&, bool isMouseOverButton, bool isButtonDown) override;
+
+        // Colors
         const juce::Colour bgBlack = juce::Colour (0xff050505);
         const juce::Colour graphite = juce::Colour (0xff1a1a1a);
         const juce::Colour steel = juce::Colour (0xff2a2a2a);
@@ -37,15 +41,20 @@ private:
 
     GothicLookAndFeel gothicLF;
 
-    // 2. Кастомные структуры контролов
+    // Helper to create a knob with numerical entry
     struct PremiumKnob : public juce::Slider
     {
         PremiumKnob()
         {
             setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
             setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 20);
-            // LookAndFeel будет назначен в конструкторе редактора
+            setColour (juce::Slider::textBoxTextColourId, gothicLF.textSilver);
+            setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+            setColour (juce::Slider::rotarySliderFillColourId, gothicLF.neonRed);
+            setColour (juce::Slider::rotarySliderOutlineColourId, gothicLF.graphite);
+            setLookAndFeel (&gothicLF);
         }
+        ~PremiumKnob() override { setLookAndFeel (nullptr); }
     };
 
     struct GothicLabel : public juce::Label
@@ -53,11 +62,12 @@ private:
         GothicLabel()
         {
             setJustificationType (juce::Justification::centred);
+            setColour (juce::Label::textColourId, gothicLF.textSilver);
             setFont (juce::Font ("Courier New", 12.0f, juce::Font::bold));
         }
     };
 
-    // 3. Привязки параметров (APVTS)
+    // Attachments
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
         driveAtt, toneAtt, biasAtt, bodyAtt, mixAtt,
         rateAtt, resAtt, fbAtt, dampAtt, charAtt, waveMixAtt;
@@ -65,18 +75,19 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         distOnAtt, waveOnAtt;
 
-    // 4. Контролы: Distortion
+    // Controls - Distortion
     PremiumKnob driveKnob, toneKnob, biasKnob, bodyKnob, mixKnob;
     GothicLabel driveLbl, toneLbl, biasLbl, bodyLbl, mixLbl;
     juce::TextButton distOnBtn;
 
-    // 5. Контролы: Waveguide
+    // Controls - Waveguide
     PremiumKnob rateKnob, resKnob, fbKnob, dampKnob, charKnob, waveMixKnob;
     GothicLabel rateLbl, resLbl, fbLbl, dampLbl, charLbl, waveMixLbl;
     juce::TextButton waveOnBtn;
 
-    // 6. Заголовок и зоны макета
+    // Title
     GothicLabel titleLbl;
+
     juce::Rectangle<int> distortionArea, waveguideArea;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveringAudioProcessorEditor)
