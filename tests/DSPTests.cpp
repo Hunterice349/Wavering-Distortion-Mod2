@@ -1,4 +1,4 @@
-diff --git a/tests/DSPTests.cpp b/tests/DSPTests.cpp
+#include "../src/DistortionDSP.h"diff --git a/tests/DSPTests.cpp b/tests/DSPTests.cpp
 --- a/tests/DSPTests.cpp
 +++ b/tests/DSPTests.cpp
 @@ -193,6 +193,291 @@ void testNonFiniteInputs()
