@@ -55,21 +55,13 @@ jobs:
             libglu1-mesa-dev
 
       - name: Configure CMake
-        run: |
-          cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build plugin and tests
-        run: |
-          cmake --build build \
-            --config Release \
-            --parallel
+        run: cmake --build build --config Release --parallel
 
       - name: Run DSP tests
-        run: |
-          ctest --test-dir build \
-            -C Release \
-            --output-on-failure
+        run: ctest --test-dir build -C Release --output-on-failure
 
       - name: Upload VST3 artifact
         uses: actions/upload-artifact@v4
@@ -77,4 +69,3 @@ jobs:
           name: Wavering-Distortion-${{ matrix.os }}-VST3
           path: build/WaveringDistortionMod_artefacts/Release/VST3/*.vst3
           if-no-files-found: error
-
