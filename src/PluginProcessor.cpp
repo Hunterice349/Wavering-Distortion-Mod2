@@ -1,6 +1,9 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <algorithm>
+#include <cmath>
+
 WaveringAudioProcessor::WaveringAudioProcessor()
     : AudioProcessor (BusesProperties().withInput  ("Input", juce::AudioChannelSet::stereo(), true)
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
@@ -30,6 +33,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout WaveringAudioProcessor::crea
         FloatAttributes().withLabel ("")));
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { "distortionEnabled", 1 }, "Distortion On", true));
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "distortionMode", 1 }, "Distortion Mode",
+        juce::StringArray { "Drive", "Overdrive", "Distortion", "Fuzz", "Hard Clip" }, 0));
 
     parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "waveRate", 1 }, "Waveguide Rate", controlRange, 5.0f,
@@ -64,6 +70,12 @@ DistortionDSP::Parameters WaveringAudioProcessor::readDistortionParameters() con
     parameters.body = apvts.getRawParameterValue ("body")->load();
     parameters.mix = apvts.getRawParameterValue ("mix")->load();
     parameters.enabled = apvts.getRawParameterValue ("distortionEnabled")->load() > 0.5f;
+
+    const int modeIndex = juce::roundToInt (
+        apvts.getRawParameterValue ("distortionMode")->load());
+
+    parameters.mode = static_cast<DistortionDSP::Mode> (juce::jlimit (0, 4, modeIndex));
+
     return parameters;
 }
 
@@ -77,20 +89,101 @@ WaveguideDSP::Parameters WaveringAudioProcessor::readWaveguideParameters() const
     parameters.character = apvts.getRawParameterValue ("waveCharacter")->load();
     parameters.mix = apvts.getRawParameterValue ("waveMix")->load();
     parameters.enabled = apvts.getRawParameterValue ("waveguideEnabled")->load() > 0.5f;
+
     return parameters;
+}
+
+double WaveringAudioProcessor::getTailLengthSeconds() const
+{
+    const auto* enabledParameter = apvts.getRawParameterValue ("waveguideEnabled");
+    const auto* mixParameter = apvts.getRawParameterValue ("waveMix");
+    const auto* rateParameter = apvts.getRawParameterValue ("waveRate");
+    const auto* feedbackParameter = apvts.getRawParameterValue ("waveFeedback");
+    const auto* resonanceParameter = apvts.getRawParameterValue ("waveResonance");
+
+    if (enabledParameter == nullptr
+        || mixParameter == nullptr
+        || rateParameter == nullptr
+        || feedbackParameter == nullptr
+        || resonanceParameter == nullptr)
+        return 0.0;
+
+    if (enabledParameter->load() <= 0.5f)
+        return 0.0;
+
+    const float mix = mixParameter->load();
+
+    if (! std::isfinite (mix) || mix <= 0.001f)
+        return 0.0;
+
+    const float rawRate = rateParameter->load();
+    const float rawFeedback = feedbackParameter->load();
+    const float rawResonance = resonanceParameter->load();
+
+    if (! std::isfinite (rawRate)
+        || ! std::isfinite (rawFeedback)
+        || ! std::isfinite (rawResonance))
+        return 0.0;
+
+    // All Waveguide controls use a 0..10 parameter range.
+    const double rate = juce::jlimit (0.0, 1.0,
+                                      static_cast<double> (rawRate) * 0.1);
+
+    const double feedback = juce::jlimit (0.0, 1.0,
+                                          static_cast<double> (rawFeedback) * 0.1);
+
+    const double resonance = juce::jlimit (0.0, 1.0,
+                                           static_cast<double> (rawResonance) * 0.1);
+
+    // Keep this calculation synchronized with WaveguideDSP.cpp.
+    const double delaySeconds = 0.002 * std::pow (60.0, rate);
+
+    constexpr double maximumFeedback = 0.94;
+    constexpr double silenceThreshold = 0.001;
+    constexpr double smoothingSeconds = 0.015;
+    constexpr double maximumTailSeconds = 30.0;
+
+    const double feedbackGain =
+        maximumFeedback * feedback * (0.12 + 0.88 * resonance);
+
+    if (! std::isfinite (delaySeconds)
+        || ! std::isfinite (feedbackGain)
+        || delaySeconds <= 0.0)
+        return 0.0;
+
+    // One delay period is still required when feedback is effectively zero.
+    if (feedbackGain <= silenceThreshold)
+        return std::min (delaySeconds + smoothingSeconds, maximumTailSeconds);
+
+    // Estimate the number of feedback repeats until the signal falls
+    // below -60 dB relative to its initial amplitude.
+    const double repeatCount = std::ceil (
+        std::log (silenceThreshold) / std::log (feedbackGain));
+
+    if (! std::isfinite (repeatCount) || repeatCount < 0.0)
+        return maximumTailSeconds;
+
+    const double tailSeconds =
+        delaySeconds * (1.0 + repeatCount) + smoothingSeconds;
+
+    return std::min (tailSeconds, maximumTailSeconds);
 }
 
 bool WaveringAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     const auto& output = layouts.getMainOutputChannelSet();
     const auto& input = layouts.getMainInputChannelSet();
+
     return input == output && (output == juce::AudioChannelSet::mono()
                                || output == juce::AudioChannelSet::stereo());
 }
 
 void WaveringAudioProcessor::prepareToPlay (double sampleRate, int)
 {
-    currentSampleRate = std::isfinite (sampleRate) && sampleRate > 1.0 ? sampleRate : 44100.0;
+    currentSampleRate = std::isfinite (sampleRate) && sampleRate > 1.0
+        ? sampleRate
+        : 44100.0;
+
     distortion.prepare (currentSampleRate, readDistortionParameters());
     waveguide.prepare (currentSampleRate, readWaveguideParameters());
 }
@@ -101,9 +194,11 @@ void WaveringAudioProcessor::releaseResources()
     waveguide.reset();
 }
 
-void WaveringAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void WaveringAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
+                                           juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
+
     const int numSamples = buffer.getNumSamples();
     const int inputChannels = getTotalNumInputChannels();
     const int outputChannels = getTotalNumOutputChannels();
@@ -116,7 +211,9 @@ void WaveringAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
 
     distortion.setParameters (readDistortionParameters());
     waveguide.setParameters (readWaveguideParameters());
+
     const bool stereo = outputChannels > 1 && inputChannels > 1;
+
     float* left = buffer.getWritePointer (0);
     float* right = stereo ? buffer.getWritePointer (1) : nullptr;
 
@@ -124,12 +221,21 @@ void WaveringAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     {
         const float inputLeft = left[sample];
         const float inputRight = stereo ? right[sample] : inputLeft;
-        float distortedLeft = 0.0f, distortedRight = 0.0f;
-        distortion.processFrame (inputLeft, inputRight, stereo, distortedLeft, distortedRight);
 
-        float outputLeft = 0.0f, outputRight = 0.0f;
-        waveguide.processFrame (distortedLeft, distortedRight, stereo, outputLeft, outputRight);
+        float distortedLeft = 0.0f;
+        float distortedRight = 0.0f;
+
+        distortion.processFrame (inputLeft, inputRight, stereo,
+                                distortedLeft, distortedRight);
+
+        float outputLeft = 0.0f;
+        float outputRight = 0.0f;
+
+        waveguide.processFrame (distortedLeft, distortedRight, stereo,
+                                outputLeft, outputRight);
+
         left[sample] = outputLeft;
+
         if (stereo)
             right[sample] = outputRight;
     }
@@ -147,8 +253,11 @@ void WaveringAudioProcessor::setStateInformation (const void* data, int sizeInBy
     if (data == nullptr || sizeInBytes <= 0)
         return;
 
-    juce::MemoryInputStream stream (data, static_cast<size_t> (sizeInBytes), false);
+    juce::MemoryInputStream stream (
+        data, static_cast<size_t> (sizeInBytes), false);
+
     const auto state = juce::ValueTree::readFromStream (stream);
+
     if (state.isValid() && state.hasType ("Parameters"))
         apvts.replaceState (state);
 }
