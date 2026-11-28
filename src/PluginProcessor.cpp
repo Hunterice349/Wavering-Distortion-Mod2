@@ -30,6 +30,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout WaveringAudioProcessor::crea
         FloatAttributes().withLabel ("")));
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { "distortionEnabled", 1 }, "Distortion On", true));
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "distortionMode", 1 }, "Distortion Mode",
+        juce::StringArray { "Drive", "Overdrive", "Distortion", "Fuzz", "Hard Clip" }, 0));
 
     parameters.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "waveRate", 1 }, "Waveguide Rate", controlRange, 5.0f,
@@ -64,6 +67,8 @@ DistortionDSP::Parameters WaveringAudioProcessor::readDistortionParameters() con
     parameters.body = apvts.getRawParameterValue ("body")->load();
     parameters.mix = apvts.getRawParameterValue ("mix")->load();
     parameters.enabled = apvts.getRawParameterValue ("distortionEnabled")->load() > 0.5f;
+    const int modeIndex = juce::roundToInt (apvts.getRawParameterValue ("distortionMode")->load());
+    parameters.mode = static_cast<DistortionDSP::Mode> (juce::jlimit (0, 4, modeIndex));
     return parameters;
 }
 
