@@ -73,7 +73,7 @@ void testNonFiniteInputs()
 
 void testEnabledSmoothing()
 {
-    constexpr int rampSamples = 576;
+    constexpr int rampSamples = 720;
     constexpr float inputLeft = 0.4f;
     constexpr float inputRight = -0.3f;
 
