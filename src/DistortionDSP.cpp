@@ -1,5 +1,17 @@
 #include "DistortionDSP.h"
 
+namespace
+{
+constexpr float pi = 3.14159265358979323846f;
+constexpr float maximumWet = 1.0f;
+
+int validModeIndex(DistortionDSP::Mode mode) noexcept
+{
+    const int value = static_cast<int>(mode);
+    return value >= 0 && value <= 4 ? value : 0;
+}
+}
+
 void DistortionDSP::Smoother::reset(int rampSamples, float initial) noexcept
 {
     rampLength = std::max(1, rampSamples);
@@ -10,10 +22,7 @@ void DistortionDSP::Smoother::reset(int rampSamples, float initial) noexcept
 
 void DistortionDSP::Smoother::setTarget(float value) noexcept
 {
-    if (!std::isfinite(value))
-        return;
-
-    if (value == target)
+    if (!std::isfinite(value) || value == target)
         return;
 
     target = value;
@@ -26,11 +35,9 @@ float DistortionDSP::Smoother::next() noexcept
     if (remaining > 0)
     {
         current += increment;
-
         if (--remaining == 0)
             current = target;
     }
-
     return current;
 }
 
@@ -39,42 +46,25 @@ float DistortionDSP::finiteOrZero(float value) noexcept
     return std::isfinite(value) ? value : 0.0f;
 }
 
-float DistortionDSP::safeOutput(float value) noexcept
+float DistortionDSP::clampParameter(float value, float low, float high) noexcept
 {
-    if (!std::isfinite(value))
-        return 0.0f;
-
-    return std::clamp(value, -1.0f, 1.0f);
+    return std::clamp(finiteOrZero(value), low, high);
 }
 
-void DistortionDSP::prepare(double newSampleRate,
-                            const Parameters& initial) noexcept
+void DistortionDSP::prepare(double newSampleRate, const Parameters& initial) noexcept
 {
     sampleRate = std::isfinite(newSampleRate) && newSampleRate > 1000.0
         ? std::clamp(newSampleRate, 8000.0, 384000.0)
         : 44100.0;
 
-    const int rampSamples = std::max(
-        1, static_cast<int>(sampleRate * 0.015));
-
-    driveSmoother.reset(rampSamples,
-        std::clamp(finiteOrZero(initial.drive), 0.0f, 10.0f));
-
-    toneSmoother.reset(rampSamples,
-        std::clamp(finiteOrZero(initial.tone), 0.0f, 10.0f));
-
-    biasSmoother.reset(rampSamples,
-        std::clamp(finiteOrZero(initial.bias), 0.0f, 10.0f));
-
-    bodySmoother.reset(rampSamples,
-        std::clamp(finiteOrZero(initial.body), 0.0f, 10.0f));
-
-    mixSmoother.reset(rampSamples,
-        std::clamp(finiteOrZero(initial.mix), 0.0f, 10.0f));
-
-    enableSmoother.reset(rampSamples,
-        initial.enabled ? 1.0f : 0.0f);
-
+    const int rampSamples = std::max(1, static_cast<int>(sampleRate * 0.015));
+    driveSmoother.reset(rampSamples, clampParameter(initial.drive, 0.0f, 10.0f));
+    toneSmoother.reset(rampSamples, clampParameter(initial.tone, 0.0f, 10.0f));
+    biasSmoother.reset(rampSamples, clampParameter(initial.bias, 0.0f, 10.0f));
+    bodySmoother.reset(rampSamples, clampParameter(initial.body, 0.0f, 10.0f));
+    mixSmoother.reset(rampSamples, clampParameter(initial.mix, 0.0f, 10.0f));
+    modeSmoother.reset(rampSamples, static_cast<float>(validModeIndex(initial.mode)));
+    enableSmoother.reset(rampSamples, initial.enabled ? 1.0f : 0.0f);
     reset();
 }
 
@@ -86,85 +76,114 @@ void DistortionDSP::reset() noexcept
 
 void DistortionDSP::setParameters(const Parameters& parameters) noexcept
 {
-    driveSmoother.setTarget(
-        std::clamp(finiteOrZero(parameters.drive), 0.0f, 10.0f));
-
-    toneSmoother.setTarget(
-        std::clamp(finiteOrZero(parameters.tone), 0.0f, 10.0f));
-
-    biasSmoother.setTarget(
-        std::clamp(finiteOrZero(parameters.bias), 0.0f, 10.0f));
-
-    bodySmoother.setTarget(
-        std::clamp(finiteOrZero(parameters.body), 0.0f, 10.0f));
-
-    mixSmoother.setTarget(
-        std::clamp(finiteOrZero(parameters.mix), 0.0f, 10.0f));
-
+    driveSmoother.setTarget(clampParameter(parameters.drive, 0.0f, 10.0f));
+    toneSmoother.setTarget(clampParameter(parameters.tone, 0.0f, 10.0f));
+    biasSmoother.setTarget(clampParameter(parameters.bias, 0.0f, 10.0f));
+    bodySmoother.setTarget(clampParameter(parameters.body, 0.0f, 10.0f));
+    mixSmoother.setTarget(clampParameter(parameters.mix, 0.0f, 10.0f));
+    modeSmoother.setTarget(static_cast<float>(validModeIndex(parameters.mode)));
     enableSmoother.setTarget(parameters.enabled ? 1.0f : 0.0f);
 }
 
-float DistortionDSP::processChannel(float input,
-                                    float& toneState,
-                                    float toneCoefficient,
-                                    float drive,
-                                    float bias,
-                                    float body) noexcept
+float DistortionDSP::processWaveshaper(float input, Mode mode) noexcept
+{
+    switch (mode)
+    {
+        case Mode::drive:
+            // Legacy Wavering Drive curve: deliberately preserved.
+            return std::tanh(input);
+
+        case Mode::overdrive:
+        {
+            // Soft asymmetric diode-like clipping with a restrained knee.
+            const float asymmetric = input >= 0.0f ? input * 1.08f : input * 0.92f;
+            return std::tanh(asymmetric * 1.45f) / std::tanh(1.45f);
+        }
+
+        case Mode::distortion:
+            // More aggressive, normalized hard-knee saturation.
+            return (2.0f / pi) * std::atan(input * 3.2f);
+
+        case Mode::fuzz:
+        {
+            // Dense transistor-style saturation with a soft transition around zero.
+            const float boosted = input * 4.5f;
+            const float shaped = std::tanh(boosted);
+            const float folded = std::sin(std::clamp(boosted, -pi * 0.5f, pi * 0.5f));
+            return std::clamp(0.78f * shaped + 0.22f * folded, -1.0f, 1.0f);
+        }
+
+        case Mode::hardClip:
+            return std::clamp(input * 2.2f, -1.0f, 1.0f);
+    }
+
+    return std::tanh(input);
+}
+
+float DistortionDSP::processChannel(float input, float& toneState,
+                                    float toneCoefficient, float drive,
+                                    float bias, float body, float modePosition) noexcept
 {
     const float driveGain = 1.0f + drive * 2.0f;
     const float biasOffset = (bias - 5.0f) * 0.08f;
-
     const float driven = finiteOrZero(input * driveGain + biasOffset);
-    const float saturated = std::tanh(driven);
 
-    const float cutoff = 500.0f *
-        std::pow(36.0f, 1.0f - toneCoefficient);
+    // Interpolate adjacent curves during mode changes to avoid abrupt waveform jumps.
+    const float boundedMode = std::clamp(modePosition, 0.0f, 4.0f);
+    const int lowerIndex = static_cast<int>(boundedMode);
+    const int upperIndex = std::min(lowerIndex + 1, 4);
+    const float modeFraction = boundedMode - static_cast<float>(lowerIndex);
+    const float lower = processWaveshaper(driven, static_cast<Mode>(lowerIndex));
+    const float upper = processWaveshaper(driven, static_cast<Mode>(upperIndex));
+    const float saturated = lower + (upper - lower) * modeFraction;
 
+    const float cutoff = 500.0f * std::pow(36.0f, 1.0f - toneCoefficient);
     const float coefficient = 1.0f - std::exp(
-        -2.0f * 3.14159265358979323846f *
-        std::min(cutoff, static_cast<float>(sampleRate * 0.45)) /
-        static_cast<float>(sampleRate));
+        -2.0f * pi * std::min(cutoff, static_cast<float>(sampleRate * 0.45))
+        / static_cast<float>(sampleRate));
 
     toneState += coefficient * (saturated - toneState);
     toneState = finiteOrZero(toneState);
 
     const float bodyGain = 1.0f + (body - 5.0f) * 0.025f;
-
     return finiteOrZero(toneState * bodyGain);
 }
 
-void DistortionDSP::processFrame(float inputLeft,
-                                 float inputRight,
-                                 bool stereo,
-                                 float& outputLeft,
-                                 float& outputRight) noexcept
+void DistortionDSP::processFrame(float inputLeft, float inputRight, bool stereo,
+                                 float& outputLeft, float& outputRight) noexcept
 {
     const float drive = driveSmoother.next();
     const float tone = toneSmoother.next();
     const float bias = biasSmoother.next();
     const float body = bodySmoother.next();
     const float mix = mixSmoother.next() * 0.1f;
+    const float modePosition = modeSmoother.next();
     const float enabled = enableSmoother.next();
 
     const float dryLeft = finiteOrZero(inputLeft);
     const float dryRight = stereo ? finiteOrZero(inputRight) : dryLeft;
 
-    const float wetLeft = processChannel(
-        dryLeft, toneStateLeft, tone * 0.1f,
-        drive, bias, body);
+    // Avoid unnecessary wet processing once the effect has reached exact bypass.
+    if (mix <= 0.0f || enabled <= 0.0f)
+    {
+        outputLeft = dryLeft;
+        outputRight = stereo ? dryRight : 0.0f;
+        return;
+    }
+
+    const float wetLeft = std::clamp(processChannel(
+        dryLeft, toneStateLeft, tone * 0.1f, drive, bias, body, modePosition),
+        -maximumWet, maximumWet);
 
     const float wetRight = stereo
-        ? processChannel(dryRight, toneStateRight, tone * 0.1f,
-                         drive, bias, body)
+        ? std::clamp(processChannel(dryRight, toneStateRight, tone * 0.1f,
+                                    drive, bias, body, modePosition),
+                     -maximumWet, maximumWet)
         : wetLeft;
 
-    const float mixedLeft = dryLeft + (wetLeft - dryLeft) * mix;
-    const float mixedRight = dryRight + (wetRight - dryRight) * mix;
-
-    outputLeft = safeOutput(
-        dryLeft + (mixedLeft - dryLeft) * enabled);
-
+    const float wetMix = mix * enabled;
+    outputLeft = finiteOrZero(dryLeft + (wetLeft - dryLeft) * wetMix);
     outputRight = stereo
-        ? safeOutput(dryRight + (mixedRight - dryRight) * enabled)
+        ? finiteOrZero(dryRight + (wetRight - dryRight) * wetMix)
         : 0.0f;
 }
