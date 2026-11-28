@@ -483,3 +483,4 @@ void DistortionDSP::processFrame(
             dryRight + (wetRight - dryRight) * wetMix)
         : 0.0f;
 }
+
