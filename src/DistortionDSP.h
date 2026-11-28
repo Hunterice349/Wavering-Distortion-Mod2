@@ -6,6 +6,15 @@
 class DistortionDSP
 {
 public:
+    enum class Mode : int
+    {
+        drive = 0,
+        overdrive,
+        distortion,
+        fuzz,
+        hardClip
+    };
+
     struct Parameters
     {
         float drive = 0.0f;
@@ -13,6 +22,7 @@ public:
         float bias = 5.0f;
         float body = 5.0f;
         float mix = 10.0f;
+        Mode mode = Mode::drive;
         bool enabled = true;
     };
 
@@ -40,14 +50,14 @@ private:
     };
 
     static float finiteOrZero(float value) noexcept;
-    static float safeOutput(float value) noexcept;
+    static float clampParameter(float value, float low, float high) noexcept;
+    static float processWaveshaper(float input, Mode mode) noexcept;
 
     float processChannel(float input, float& toneState,
                          float toneCoefficient, float drive,
-                         float bias, float body) noexcept;
+                         float bias, float body, float modePosition) noexcept;
 
     double sampleRate = 44100.0;
-
     float toneStateLeft = 0.0f;
     float toneStateRight = 0.0f;
 
@@ -56,5 +66,6 @@ private:
     Smoother biasSmoother;
     Smoother bodySmoother;
     Smoother mixSmoother;
+    Smoother modeSmoother;
     Smoother enableSmoother;
 };
