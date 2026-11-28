@@ -16,6 +16,13 @@ public:
         hardClip
     };
 
+    enum class Character : int
+    {
+        tube = 0,
+        digital,
+        hybrid
+    };
+
     struct Parameters
     {
         float drive = 0.0f;
@@ -25,28 +32,29 @@ public:
         float mix = 10.0f;
 
         Mode mode = Mode::drive;
+        Character character = Character::tube;
         bool enabled = true;
     };
 
-    void prepare (double sampleRate,
-                  const Parameters& initial) noexcept;
+    void prepare(double sampleRate,
+                 const Parameters& initial) noexcept;
 
     void reset() noexcept;
 
-    void setParameters (const Parameters& parameters) noexcept;
+    void setParameters(const Parameters& parameters) noexcept;
 
-    void processFrame (float inputLeft,
-                       float inputRight,
-                       bool stereo,
-                       float& outputLeft,
-                       float& outputRight) noexcept;
+    void processFrame(float inputLeft,
+                      float inputRight,
+                      bool stereo,
+                      float& outputLeft,
+                      float& outputRight) noexcept;
 
 private:
     class Smoother
     {
     public:
-        void reset (int rampSamples, float initial) noexcept;
-        void setTarget (float value) noexcept;
+        void reset(int rampSamples, float initial) noexcept;
+        void setTarget(float value) noexcept;
         float next() noexcept;
 
     private:
@@ -58,29 +66,36 @@ private:
         int rampLength = 1;
     };
 
-    static float finiteOrZero (float value) noexcept;
+    static float finiteOrZero(float value) noexcept;
 
-    static float clampParameter (float value,
-                                 float low,
-                                 float high) noexcept;
+    static float clampParameter(float value,
+                                float low,
+                                float high) noexcept;
 
-    static int validModeIndex (Mode mode) noexcept;
+    static int validModeIndex(Mode mode) noexcept;
+    static int validCharacterIndex(Character character) noexcept;
 
-    static float processWaveshaper (float input,
-                                   Mode mode) noexcept;
+    static float processWaveshaper(float input,
+                                   Mode mode,
+                                   Character character) noexcept;
 
-    float processChannel (float input,
-                          float& toneState,
-                          float toneCoefficient,
-                          float drive,
-                          float bias,
-                          float body,
-                          float modePosition) noexcept;
+    float processChannel(float input,
+                         float& toneState,
+                         float& bodyState,
+                         float tone,
+                         float drive,
+                         float bias,
+                         float body,
+                         float modePosition,
+                         float characterPosition) noexcept;
 
     double sampleRate = 44100.0;
 
     float toneStateLeft = 0.0f;
     float toneStateRight = 0.0f;
+
+    float bodyStateLeft = 0.0f;
+    float bodyStateRight = 0.0f;
 
     Smoother driveSmoother;
     Smoother toneSmoother;
@@ -88,5 +103,6 @@ private:
     Smoother bodySmoother;
     Smoother mixSmoother;
     Smoother modeSmoother;
+    Smoother characterSmoother;
     Smoother enableSmoother;
 };
